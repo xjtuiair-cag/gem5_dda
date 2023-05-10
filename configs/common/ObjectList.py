@@ -175,6 +175,7 @@ class EnumList(ObjectList):
                 self._sub_classes[key] = value
 
 
+tag_list = ObjectList(getattr(m5.objects, 'BaseTags', None))
 rp_list = ObjectList(getattr(m5.objects, "BaseReplacementPolicy", None))
 bp_list = ObjectList(getattr(m5.objects, "BranchPredictor", None))
 cpu_list = CPUList(getattr(m5.objects, "BaseCPU", None))

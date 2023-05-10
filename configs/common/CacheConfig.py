@@ -56,6 +56,19 @@ def _get_hwp(hwp_option):
     hwpClass = ObjectList.hwp_list.get(hwp_option)
     return hwpClass()
 
+def _get_replply(repl_option):
+    if repl_option == None:
+        return NULL
+
+    replClass = ObjectList.rp_list.get(repl_option)
+    return replClass()
+
+def _get_tag_store(tag_store_option):
+    if tag_store_option == None:
+        return NULL
+
+    tagClass = ObjectList.tag_list.get(tag_store_option)
+    return tagClass()
 
 def _get_cache_opts(level, options):
     opts = {}
@@ -71,6 +84,16 @@ def _get_cache_opts(level, options):
     prefetcher_attr = "{}_hwp_type".format(level)
     if hasattr(options, prefetcher_attr):
         opts["prefetcher"] = _get_hwp(getattr(options, prefetcher_attr))
+    
+    repl_policy_attr = '{}_repl_policy'.format(level)
+    if hasattr(options, repl_policy_attr):
+        opts['replacement_policy'] = _get_replply(getattr(options, repl_policy_attr))
+    
+    tag_store_attr = '{}_tag_store'.format(level)
+    if hasattr(options, tag_store_attr):
+        opts['tags'] = _get_tag_store(getattr(options, tag_store_attr))
+
+    print(opts)
 
     return opts
 
