@@ -687,3 +687,14 @@ class PIFPrefetcher(QueuedPrefetcher):
         self.addEvent(
             HWPProbeEventRetiredInsts(self, simObj, "RetiredInstsPC")
         )
+
+class DiffMatchingPrefetcher(StridePrefetcher):
+    type = 'DiffMatchingPrefetcher'
+    cxx_class = 'gem5::prefetch::DiffMatching'
+    cxx_header = "mem/cache/prefetch/diff_matching.hh"
+                
+    iddt_ent_num = Param.Unsigned(16, "Number of entries of iddt")
+    tadt_ent_num = Param.Unsigned(16, "Number of entries of tadt")
+    rt_ent_num = Param.Unsigned(16, "Number of entries of rt")
+    iddt_diff_num = Param.Unsigned(3, "Number of difference entries of iddt")
+    tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")

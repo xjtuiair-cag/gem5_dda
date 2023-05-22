@@ -895,7 +895,7 @@ BaseCache::getNextQueueEntry()
 
     // fall through... no pending requests.  Try a prefetch.
     assert(!miss_mshr && !wq_entry);
-    if (prefetcher && mshrQueue.canPrefetch() && !isBlocked()) {
+    while (prefetcher && mshrQueue.canPrefetch() && !isBlocked()) {
         // If we have a miss queue slot, we can try a prefetch
         PacketPtr pkt = prefetcher->getPacket();
         if (pkt) {
@@ -929,6 +929,8 @@ BaseCache::getNextQueueEntry()
                 // schedule the send
                 return allocateMissBuffer(pkt, curTick(), false);
             }
+        } else {
+            break;
         }
     }
 
