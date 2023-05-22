@@ -463,7 +463,7 @@ def repeatSwitch(testsys, repeat_switch_cpu_list, maxtick, switch_freq):
             return exit_event
 
 
-def run(options, root, testsys, cpu_class):
+def run(options, root, testsys, cpu_class, multiprocesses=0):
     if options.checkpoint_dir:
         cptdir = options.checkpoint_dir
     elif m5.options.outdir:
@@ -675,6 +675,8 @@ def run(options, root, testsys, cpu_class):
         cpt_starttick, checkpoint_dir = findCptDir(options, cptdir, testsys)
     root.apply_config(options.param)
     m5.instantiate(checkpoint_dir)
+
+    #multiprocesses[0].map(0x80000000,0x80000000,0x70000000,cacheable=True)
 
     # Initialization is complete.  If we're not in control of simulation
     # (that is, if we're a slave simulator acting as a component in another

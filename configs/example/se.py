@@ -285,4 +285,4 @@ if args.wait_gdb:
     system.workload.wait_for_remote_gdb = True
 
 root = Root(full_system=False, system=system)
-Simulation.run(args, root, system, FutureClass)
+Simulation.run(args, root, system, FutureClass, multiprocesses)
