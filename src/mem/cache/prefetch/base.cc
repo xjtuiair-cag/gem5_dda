@@ -86,7 +86,11 @@ Base::PrefetchInfo::PrefetchInfo(PrefetchInfo const &pfi, Addr addr)
 void
 Base::PrefetchListener::notify(const PacketPtr &pkt)
 {
-    if (isFill) {
+    if (l1_req) {
+        parent.notifyL1Req(pkt);
+    } else if (l1_resp) {
+        parent.notifyL1Resp(pkt);
+    } else if (isFill) {
         parent.notifyFill(pkt);
     } else {
         parent.probeNotify(pkt, miss);
@@ -291,11 +295,19 @@ Base::regProbeListeners()
     }
 }
 
+// void
+// Base::addEventProbe(SimObject *obj, const char *name)
+// {
+//     ProbeManager *pm(obj->getProbeManager());
+//     listeners.push_back(new PrefetchListener(*this, pm, name));
+// }
+
 void
-Base::addEventProbe(SimObject *obj, const char *name)
+Base::addEventProbe(SimObject *obj, const char *name,
+                    bool isFill=false, bool isMiss=false, bool l1_req=false, bool l1_resp=false)
 {
     ProbeManager *pm(obj->getProbeManager());
-    listeners.push_back(new PrefetchListener(*this, pm, name));
+    listeners.push_back(new PrefetchListener(*this, pm, name, isFill, isMiss, l1_req, l1_resp));
 }
 
 void

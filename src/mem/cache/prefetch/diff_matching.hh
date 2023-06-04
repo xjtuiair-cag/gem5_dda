@@ -99,6 +99,9 @@ class DiffMatching : public Stride
     };
     std::vector<RelationTableEntry> relationTable;
 
+    // Capture a normal request packet to generate prefetch with resp data.
+    // Otherwise there will be a segfault using resp packet 
+    // TODO: Self built request
     DeferredPacket * dpp_req;
 
   public:
@@ -106,9 +109,16 @@ class DiffMatching : public Stride
     DiffMatching(const DiffMatchingPrefetcherParams &p);
     ~DiffMatching();
 
+    // Base notify for Cache access (Hit or Miss)
     void notify (const PacketPtr &pkt, const PrefetchInfo &pfi) override;
     
+    // Probe DataResp from Memory for prefetch generation
     void notifyFill(const PacketPtr &pkt) override;
+
+    // Probe AddrReq to L1 for prefetch detection
+    void notifyL1Req(const PacketPtr &pkt) override;
+    // Probe DataResp from L1 for prefetch detection
+    void notifyL1Resp(const PacketPtr &pkt) override;
 
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;

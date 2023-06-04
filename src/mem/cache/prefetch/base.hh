@@ -75,15 +75,19 @@ class Base : public ClockedObject
     {
       public:
         PrefetchListener(Base &_parent, ProbeManager *pm,
-                         const std::string &name, bool _isFill = false,
-                         bool _miss = false)
+                         const std::string &name, bool _isFill = false, bool _miss = false,
+                         bool l1_req=false, bool l1_resp=false) 
             : ProbeListenerArgBase(pm, name),
-              parent(_parent), isFill(_isFill), miss(_miss) {}
+              parent(_parent), isFill(_isFill), miss(_miss),
+              l1_req(l1_req), l1_resp(l1_resp) {}
         void notify(const PacketPtr &pkt) override;
       protected:
         Base &parent;
         const bool isFill;
         const bool miss;
+
+        const bool l1_req;
+        const bool l1_resp;
     };
 
     std::vector<PrefetchListener *> listeners;
@@ -383,6 +387,11 @@ class Base : public ClockedObject
     virtual void notifyFill(const PacketPtr &pkt)
     {}
 
+    // Probe AddrReq to L1 for prefetch detection
+    virtual void notifyL1Req(const PacketPtr &pkt) {}
+    // Probe DataResp from L1 for prefetch detection
+    virtual void notifyL1Resp(const PacketPtr &pkt) {}
+
     virtual PacketPtr getPacket() = 0;
 
     virtual Tick nextPrefetchReadyTime() const = 0;
@@ -434,7 +443,10 @@ class Base : public ClockedObject
      * @param obj The SimObject pointer to listen from
      * @param name The probe name
      */
-    void addEventProbe(SimObject *obj, const char *name);
+    // void addEventProbe(SimObject *obj, const char *name);
+
+    void addEventProbe(SimObject *obj, const char *name, bool isFill, bool isMiss, 
+                         bool l1_req, bool l1_resp);
 
     /**
      * Add a BaseTLB object to be used whenever a translation is needed.

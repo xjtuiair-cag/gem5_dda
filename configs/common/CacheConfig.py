@@ -335,6 +335,8 @@ def config_three_level_cache(options, system):
             system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports
             system.cpu[i].l2.mem_side = system.tol3bus.cpu_side_ports
 
+            system.cpu[i].l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].l2)
+
             system.cpu[i].connectAllPorts(
                 system.cpu[i].tol2bus.cpu_side_ports,
                 system.membus.cpu_side_ports,

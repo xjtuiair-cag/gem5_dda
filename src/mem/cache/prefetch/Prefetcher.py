@@ -698,3 +698,40 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     rt_ent_num = Param.Unsigned(16, "Number of entries of rt")
     iddt_diff_num = Param.Unsigned(3, "Number of difference entries of iddt")
     tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._l1_simObj = NULL # Demand init by config
+        self._l2_simObj = NULL # Demand init by config
+    
+    def set_probe_obj(self, l1_simObj, l2_simObj):
+        self._l1_simObj = l1_simObj
+        self._l2_simObj = l2_simObj
+
+    # Override BasePrefetcher::regProbeListeners
+    # Register L1 request and response probelisteners
+    def regProbeListeners(self):
+
+        # Self ProbeListener
+        self.getCCObject().addEventProbe(
+            self._l2_simObj.getCCObject(), "Miss", False, True, False, False
+        ) 
+        self.getCCObject().addEventProbe(
+            self._l2_simObj.getCCObject(), "Fill", True, False, False, False
+        ) 
+        self.getCCObject().addEventProbe(
+            self._l2_simObj.getCCObject(), "Hit", False, False, False, False
+        ) 
+
+        if self._l1_simObj:
+            # Request to L1 ProbeListener
+            self.getCCObject().addEventProbe(
+                self._l1_simObj.getCCObject(), "Request", False, False, True, False
+            ) 
+            # Response from L1 ProbeListener
+            self.getCCObject().addEventProbe(
+                self._l1_simObj.getCCObject(), "Response", False, False, False, True
+            )
+        else:
+            print("No valid L1 SimObj !")
+        self.getCCObject().regProbeListeners()
