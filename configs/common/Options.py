@@ -178,20 +178,21 @@ def addNoISAOptions(parser):
     )
     parser.add_argument("--caches", action="store_true")
     parser.add_argument("--l2cache", action="store_true")
+    parser.add_argument("--l3cache", action="store_true")
     parser.add_argument("--num-dirs", type=int, default=1)
     parser.add_argument("--num-l2caches", type=int, default=1)
     parser.add_argument("--num-l3caches", type=int, default=1)
-    parser.add_argument("--l1d_size", type=str, default="64kB")
+    parser.add_argument("--l1d_size", type=str, default="32kB")
     parser.add_argument("--l1i_size", type=str, default="32kB")
-    parser.add_argument("--l2_size", type=str, default="2MB")
-    parser.add_argument("--l3_size", type=str, default="16MB")
+    parser.add_argument("--l2_size", type=str, default="256kB")
+    parser.add_argument("--l3_size", type=str, default="8MB")
     parser.add_argument("--l1d_assoc", type=int, default=2)
     parser.add_argument("--l1i_assoc", type=int, default=2)
     parser.add_argument("--l2_assoc", type=int, default=8)
     parser.add_argument("--l3_assoc", type=int, default=16)
     parser.add_argument("--cacheline_size", type=int, default=64)
 
-    parser.add_argument("--l2_repl_policy",  default="RandomRP",
+    parser.add_argument("--l2_repl_policy",  default="LRURP",
                     choices=ObjectList.rp_list.get_names(),
                     help="""
                     type of replacement policy to use with the L2
@@ -336,6 +337,15 @@ def addCommonOptions(parser):
         choices=ObjectList.hwp_list.get_names(),
         help="""
                         type of hardware prefetcher to use with the L2 cache.
+                        (if not set, use the default prefetcher of
+                        the selected cache)""",
+    )
+    parser.add_argument(
+        "--l3-hwp-type",
+        default=None,
+        choices=ObjectList.hwp_list.get_names(),
+        help="""
+                        type of hardware prefetcher to use with the L3 cache.
                         (if not set, use the default prefetcher of
                         the selected cache)""",
     )

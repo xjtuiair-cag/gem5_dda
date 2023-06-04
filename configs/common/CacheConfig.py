@@ -244,6 +244,107 @@ def config_cache(options, system):
 
     return system
 
+def config_three_level_cache(options, system):
+    if options.external_memory_system and (options.caches or options.l2cache):
+        print("External caches and internal caches are exclusive options.\n")
+        sys.exit(1)
+
+    if options.external_memory_system:
+        ExternalCache = ExternalCacheFactory(options.external_memory_system)
+
+    if options.cpu_type == "O3_ARM_v7a_3":
+        try:
+            import cores.arm.O3_ARM_v7a_three_level as core
+        except:
+            print("O3_ARM_v7a_3 is unavailable. Did you compile the O3 model?")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, l3_cache_class, walk_cache_class = (
+            core.O3_ARM_v7a_DCache,
+            core.O3_ARM_v7a_ICache,
+            core.O3_ARM_v7aL2,
+            core.O3_ARM_v7aL3,
+            None,
+        )
+    else:
+        dcache_class, icache_class, l2_cache_class, l3_cache_class, walk_cache_class = (
+            L1_DCache,
+            L1_ICache,
+            L2Cache,
+            L3Cache,
+            None,
+        )
+
+        if get_runtime_isa() in [ISA.X86, ISA.RISCV]:
+            walk_cache_class = PageTableWalkerCache
+
+    # Set the cache line size of the system
+    system.cache_line_size = options.cacheline_size
+
+    # If elastic trace generation is enabled, make sure the memory system is
+    # minimal so that compute delays do not include memory access latencies.
+    # Configure the compulsory L1 caches for the O3CPU, do not configure
+    # any more caches.
+    if options.l2cache and options.elastic_trace_en:
+        fatal("When elastic trace is enabled, do not configure L2 caches.")
+
+    if options.l3cache and options.elastic_trace_en:
+        fatal("When elastic trace is enabled, do not configure L3 caches.")
+
+    if options.l3cache:
+        # Provide a clock for the L2 and the L1-to-L2 bus here as they
+        # are not connected using addTwoLevelCacheHierarchy. Use the
+        # same clock as the CPUs.
+        system.l3 = l3_cache_class(
+            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l3", options)
+        )
+
+        system.tol3bus = L3XBar(clk_domain=system.cpu_clk_domain)
+        system.l3.cpu_side = system.tol3bus.mem_side_ports
+        system.l3.mem_side = system.membus.cpu_side_ports
+
+    if options.memchecker:
+        system.memchecker = MemChecker()
+
+    for i in range(options.num_cpus):
+        if options.caches:
+            icache = icache_class(**_get_cache_opts("l1i", options))
+            dcache = dcache_class(**_get_cache_opts("l1d", options))
+
+            # If we have a walker cache specified, instantiate two
+            # instances here
+            if walk_cache_class:
+                iwalkcache = walk_cache_class()
+                dwalkcache = walk_cache_class()
+            else:
+                iwalkcache = None
+                dwalkcache = None
+            
+            system.cpu[i].addPrivateSplitL1Caches(
+                icache, dcache, iwalkcache, dwalkcache
+            )
+            
+        system.cpu[i].createInterruptController()
+
+        if options.l2cache and options.l3cache:
+            system.cpu[i].l2 = l2_cache_class(
+                clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
+            )
+
+            system.cpu[i].tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
+            system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports
+            system.cpu[i].l2.mem_side = system.tol3bus.cpu_side_ports
+
+            system.cpu[i].connectAllPorts(
+                system.cpu[i].tol2bus.cpu_side_ports,
+                system.membus.cpu_side_ports,
+                system.membus.mem_side_ports
+            )
+        
+        else:
+            system.cpu[i].connectBus(system.membus)
+
+    return system
 
 # ExternalSlave provides a "port", but when that port connects to a cache,
 # the connecting CPU SimObject wants to refer to its "cpu_side".
