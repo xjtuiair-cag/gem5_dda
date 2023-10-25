@@ -92,9 +92,13 @@ class DiffMatching : public Stride
         Addr target_base_addr;
         unsigned int shift;
         bool range;
+        int range_degree;
 
-        RelationTableEntry(Addr index_pc, Addr target_pc, Addr target_base_addr, unsigned int shift, bool range)
-          : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr), shift(shift), range(range) 
+        RelationTableEntry(
+            Addr index_pc, Addr target_pc, Addr target_base_addr, 
+            unsigned int shift, bool range, int range_degree
+        ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
+            shift(shift), range(range), range_degree(range_degree)
         {}
     };
     std::vector<RelationTableEntry> relationTable;

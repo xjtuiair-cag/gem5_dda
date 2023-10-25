@@ -152,6 +152,13 @@ def addNoISAOptions(parser):
         help="Specify the physical memory size (single memory)",
     )
     parser.add_argument(
+        "--simple-mem-bandwidth",
+        action="store",
+        type=str,
+        default="12.8GiB/s",
+        help="Specify the Simple Memory bandwidth",
+    )
+    parser.add_argument(
         "--enable-dram-powerdown",
         action="store_true",
         help="Enable low-power states in DRAMInterface",
@@ -339,6 +346,27 @@ def addCommonOptions(parser):
                         type of hardware prefetcher to use with the L2 cache.
                         (if not set, use the default prefetcher of
                         the selected cache)""",
+    )
+    parser.add_argument(
+        "--stride-degree",
+        default=4,
+        action="store",
+        type=int,
+        help="Number of Stride prefetches to generate",
+    )
+    parser.add_argument(
+        "--dmp-stream-ahead-dist",
+        default=0x40,
+        action="store",
+        type=int,
+        help="Byte-distance prefetch ahead which triggered by stream refill",
+    )
+    parser.add_argument(
+        "--dmp-indir-range",
+        default=16,
+        action="store",
+        type=int,
+        help="Size of indirect prefetch range, limited by Cache blkSize",
     )
     parser.add_argument(
         "--l3-hwp-type",

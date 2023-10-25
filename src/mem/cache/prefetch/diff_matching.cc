@@ -32,8 +32,11 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     // rt_ptr=4;
 
     // temp for testing spmv prefetching generation
-    relationTable.push_back(RelationTableEntry(0x400998, 0x4009b0, 0x80000040, 4, false));
-    relationTable.push_back(RelationTableEntry(0x4009b0, 0x4009bc, 0xc0000000, 8, true));
+    // relationTable.push_back(RelationTableEntry(0x400998, 0x4009b0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
+    // relationTable.push_back(RelationTableEntry(0x4009b0, 0x4009bc, 0xc0000000, 8, true, p.indir_range));
+    relationTable.push_back(RelationTableEntry(0x4009c8, 0x4009e0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
+    relationTable.push_back(RelationTableEntry(0x4009e0, 0x4009ec, 0xc0000000, 8, true, p.indir_range));
+
     rt_ptr = 2;
 }
 
@@ -45,7 +48,7 @@ DiffMatching::~DiffMatching()
 void
 DiffMatching::notifyL1Req(const PacketPtr &pkt) 
 {  
-    DPRINTF(HWPrefetch, "notifyL1Req:: PC %llx, Addr %llx, PAddr %llx, VAddr %llx",
+    DPRINTF(HWPrefetch, "notifyL1Req: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n",
                         pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
                         pkt->getAddr(), 
                         pkt->req->getPaddr(), 
@@ -63,15 +66,18 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
         }
 
         assert(pkt->getSize() <= blkSize); 
-        uint8_t fill_data[blkSize];
-        pkt->writeData(fill_data); 
+        uint8_t data[pkt->getSize()];
+        pkt->writeData(data); 
 
-        unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
-        int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset]
-                                + (((uint64_t)fill_data[data_offset+1]) << 8)
-                                + (((uint64_t)fill_data[data_offset+2]) << 16)
-                                + (((uint64_t)fill_data[data_offset+3]) << 24));
-        DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, Data_offset %d, Data %llx\n", pkt->req->getPC(), pkt->req->getPaddr(), data_offset, resp_data);
+        uint32_t resp_data = ((uint64_t)data[0]
+                                + (((uint64_t)data[1]) << 8)
+                                + (((uint64_t)data[2]) << 16)
+                                + (((uint64_t)data[3]) << 24));
+
+        DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
+                            pkt->req->getPC(), pkt->req->getPaddr(), 
+                            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
+                            pkt->getSize(), resp_data);
     } else {
        DPRINTF(HWPrefetch, "notifyL1Resp: no PC\n");
     }
@@ -101,35 +107,42 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 
         data_offset += 4;
 
-       } while (data_offset < blkSize);
+        } while (data_offset < blkSize);
 
-    //    for (auto rt_ent: relationTable) { 
-    //        Addr pc = pkt->req->getPC();
-    //        if (pkt->getAddr() == 0xa40) continue;
-    //        if (rt_ent.index_pc == pc) {
-    //            unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
-    //            do {
-    //                int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset]
-    //                                        + (((uint64_t)fill_data[data_offset+1]) << 8)
-    //                                        + (((uint64_t)fill_data[data_offset+2]) << 16)
-    //                                        + (((uint64_t)fill_data[data_offset+3]) << 24));
+        Addr pc = pkt->req->getPC();
+        for (auto rt_ent: relationTable) { 
+            if (rt_ent.index_pc == pc) {
+                // Assume response data is a int and always occupies 4 bytes 
+                unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
+                assert(data_offset % 4 == 0);
 
-    //                //if (pc == 0x400a10) resp_data+=4;
+                unsigned range_end = std::min(data_offset + 4 * rt_ent.range_degree, blkSize);
+                do {
+                    int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset]
+                                           + (((uint64_t)fill_data[data_offset+1]) << 8)
+                                           + (((uint64_t)fill_data[data_offset+2]) << 16)
+                                           + (((uint64_t)fill_data[data_offset+3]) << 24));
 
-    //                Addr pf_addr = blockAddress( resp_data*rt_ent.shift + rt_ent.target_base_addr);
-    //                DPRINTF(HWPrefetch, "Fill: IndexPC: %llx, pkt_addr: %llx, pkt_offset: %d, pkt_data: %d, pf_addr: %llx\n", 
-    //                            pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
+                    Addr pf_addr = blockAddress( resp_data*rt_ent.shift + rt_ent.target_base_addr);
+                    DPRINTF(HWPrefetch, "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
+                               pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
 
-    //                // if (dpp_req) {
-    //                //     Tick pf_time = curTick() + clockPeriod() * latency;
-    //                //     dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-    //                //     dpp_req->pkt->req->setPC(rt_ent.target_pc);
-    //                //     addDMPToQueue(pfq, *dpp_req);
-    //                // }
-    //                data_offset += 4;
-    //            } while (rt_ent.range && data_offset < blkSize);
-    //        }
-    //    }
+                    // if (!rt_ent.pfi) continue;
+
+                    // rt_ent.pfi->setAddr(pf_addr);
+                    // insertDMP(rt_ent);
+
+                    if (dpp_req) {
+                        Tick pf_time = curTick() + clockPeriod() * latency;
+                        dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
+                        dpp_req->pkt->req->setPC(rt_ent.target_pc);
+                        addDMPToQueue(pfq, *dpp_req);
+                    }
+                
+                    data_offset += 4;
+                } while (rt_ent.range && data_offset < range_end);
+            }
+        }
     } else {
        DPRINTF(HWPrefetch, "notifyFill: no PC\n");
     }
@@ -168,7 +181,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                             pkt->req->getPaddr(), 
                             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
 
-        //notifyFill(pkt); 
+        notifyFill(pkt); 
     }
 
     Queued::notify(pkt, pfi);

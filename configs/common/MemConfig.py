@@ -141,6 +141,7 @@ def config_mem(options, system):
     opt_dram_powerdown = getattr(options, "enable_dram_powerdown", None)
     opt_mem_channels_intlv = getattr(options, "mem_channels_intlv", 128)
     opt_xor_low_bit = getattr(options, "xor_low_bit", 0)
+    opt_simple_mem_bandwidth = getattr(options, "simple_mem_bandwidth", "12.8GiB/s")
 
     if opt_mem_type == "HMC_2500_1x32":
         HMChost = HMC.config_hmc_host_ctrl(options, system)
@@ -215,6 +216,13 @@ def config_mem(options, system):
                 dram_intf = create_mem_intf(
                     intf, r, i, intlv_bits, intlv_size, opt_xor_low_bit
                 )
+
+                # Set Simple Memory bandwidth
+                if (
+                    issubclass(intf, m5.objects.SimpleMemory)
+                    and opt_simple_mem_bandwidth 
+                ):
+                    dram_intf.bandwidth = opt_simple_mem_bandwidth 
 
                 # Set the number of ranks based on the command-line
                 # options if it was explicitly set

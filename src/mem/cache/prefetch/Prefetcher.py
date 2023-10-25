@@ -699,6 +699,13 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     iddt_diff_num = Param.Unsigned(3, "Number of difference entries of iddt")
     tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")
 
+    stream_ahead_dist = Param.Unsigned(
+        64, "Byte-distance prefetch ahead which triggered by stream refill"
+    )
+    indir_range = Param.Unsigned(
+        4, "Size of indirect prefetch range, limited by Cache blkSize" 
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._l1_simObj = NULL # Demand init by config

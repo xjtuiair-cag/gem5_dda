@@ -331,11 +331,15 @@ def config_three_level_cache(options, system):
                 clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
             )
 
+            if getattr(options, "l2_hwp_type") == "DiffMatchingPrefetcher":
+                system.cpu[i].l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].l2)
+                system.cpu[i].l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+                system.cpu[i].l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+                system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
             system.cpu[i].tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
             system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports
             system.cpu[i].l2.mem_side = system.tol3bus.cpu_side_ports
-
-            system.cpu[i].l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].l2)
 
             system.cpu[i].connectAllPorts(
                 system.cpu[i].tol2bus.cpu_side_ports,
