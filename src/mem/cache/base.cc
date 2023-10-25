@@ -2512,6 +2512,10 @@ BaseCache::regProbePoints()
     ppFill = new ProbePointArg<PacketPtr>(this->getProbeManager(), "Fill");
     ppDataUpdate =
         new ProbePointArg<DataUpdate>(this->getProbeManager(), "Data Update");
+
+    
+    ppL1Req = new ProbePointArg<PacketPtr>(this->getProbeManager(), "Request");
+    ppL1Resp = new ProbePointArg<PacketPtr>(this->getProbeManager(), "Response");
 }
 
 ///////////////
@@ -2552,6 +2556,8 @@ bool
 BaseCache::CpuSidePort::recvTimingReq(PacketPtr pkt)
 {
     assert(pkt->isRequest());
+
+    cache->ppL1Req->notify(pkt);
 
     if (cache->system->bypassCaches()) {
         // Just forward the packet if caches are disabled.

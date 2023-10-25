@@ -366,7 +366,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      *
      * @return If the send was successful or not.
     */
-    bool
+    virtual bool
     sendTimingResp(PacketPtr pkt)
     {
         try {

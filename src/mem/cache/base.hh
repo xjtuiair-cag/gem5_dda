@@ -328,6 +328,16 @@ class BaseCache : public ClockedObject
 
         virtual AddrRangeList getAddrRanges() const override;
 
+        virtual bool sendTimingResp(PacketPtr pkt) override
+        {
+            bool rep_res = ResponsePort::sendTimingResp(pkt);
+
+            if (rep_res) {
+                cache->ppL1Resp->notify(pkt);
+            }
+            return rep_res;
+        };
+
       public:
 
         CpuSidePort(const std::string &_name, BaseCache *_cache,
@@ -363,6 +373,9 @@ class BaseCache : public ClockedObject
 
     /** To probe when a cache fill occurs */
     ProbePointArg<PacketPtr> *ppFill;
+
+    ProbePointArg<PacketPtr> *ppL1Req;
+    ProbePointArg<PacketPtr> *ppL1Resp;
 
     /**
      * To probe when the contents of a block are updated. Content updates
