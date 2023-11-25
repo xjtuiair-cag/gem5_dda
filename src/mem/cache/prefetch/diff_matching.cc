@@ -22,7 +22,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     iddt_ptr(0),
     tadt_ptr(0),
     rt_ptr(0),
-    dpp_req(nullptr)
+    dpp_req(nullptr),
+    statsDMP(this)
 {
     // temp for testing sssp prefetching generation
     // relationTable.push_back(RelationTableEntry(0x400a10, 0x400a1c, 0xa0000000, 4, false));
@@ -32,10 +33,16 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     // rt_ptr=4;
 
     // temp for testing spmv prefetching generation
+
     // relationTable.push_back(RelationTableEntry(0x400998, 0x4009b0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
     // relationTable.push_back(RelationTableEntry(0x4009b0, 0x4009bc, 0xc0000000, 8, true, p.indir_range));
-    relationTable.push_back(RelationTableEntry(0x4009c8, 0x4009e0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
-    relationTable.push_back(RelationTableEntry(0x4009e0, 0x4009ec, 0xc0000000, 8, true, p.indir_range));
+
+    // relationTable.push_back(RelationTableEntry(0x4009c8, 0x4009e0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
+    // relationTable.push_back(RelationTableEntry(0x4009e0, 0x4009ec, 0xc0000000, 8, true, p.indir_range));
+
+    // spmv fs
+    relationTable.push_back(RelationTableEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
+    relationTable.push_back(RelationTableEntry(0x400a28, 0x400a34, 0xc0000000, 8, true, p.indir_range, 0));
 
     rt_ptr = 2;
 }
@@ -43,6 +50,13 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
 DiffMatching::~DiffMatching()
 {
     delete dpp_req;
+}
+
+DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
+    : statistics::Group(parent),
+    ADD_STAT(dmp_pfIdentified, statistics::units::Count::get(),
+             "number of DMP prefetch candidates identified")
+{
 }
 
 void
@@ -110,7 +124,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
         } while (data_offset < blkSize);
 
         Addr pc = pkt->req->getPC();
-        for (auto rt_ent: relationTable) { 
+        for (const auto& rt_ent: relationTable) { 
             if (rt_ent.index_pc == pc) {
                 // Assume response data is a int and always occupies 4 bytes 
                 unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
@@ -126,17 +140,43 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
                     Addr pf_addr = blockAddress( resp_data*rt_ent.shift + rt_ent.target_base_addr);
                     DPRINTF(HWPrefetch, "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
                                pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
+                    
+                    // if (!rt_ent.pfi) break;
+                    // PrefetchInfo new_pfi(rt_ent.pfi, pf_addr);
+                    // insert(pkt, new_pfi, addr_prio.second);
 
                     // if (!rt_ent.pfi) continue;
 
                     // rt_ent.pfi->setAddr(pf_addr);
                     // insertDMP(rt_ent);
 
+                    // if (dpp_req) {
+                    //     Tick pf_time = curTick() + clockPeriod() * latency;
+                    //     dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
+                    //     dpp_req->pkt->req->setPC(rt_ent.index_pc);
+                    //     addDMPToQueue(pfq, *dpp_req);
+                    // }
+
                     if (dpp_req) {
+                        assert(tlb != nullptr);
+
+                        /* create pkt and req for dpp_req, fake for later translation*/
                         Tick pf_time = curTick() + clockPeriod() * latency;
                         dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-                        dpp_req->pkt->req->setPC(rt_ent.target_pc);
-                        addDMPToQueue(pfq, *dpp_req);
+                        dpp_req->pkt->req->setPC(rt_ent.index_pc);
+                        dpp_req->pfInfo.setPC(rt_ent.index_pc);
+
+                        /* make translation request and set PREFETCH flag*/
+                        RequestPtr translation_req = std::make_shared<Request>(
+                            pf_addr, blkSize, dpp_req->pkt->req->getFlags(), requestorId, pc,
+                            rt_ent.cID);
+                        translation_req->setFlags(Request::PREFETCH);
+
+                        /* set trans. request, append to pfqMissingTranslation*/
+                        dpp_req->setTranslationRequest(translation_req);
+                        dpp_req->tc = cache->system->threads[translation_req->contextId()];
+                        addDMPToQueue(pfqMissingTranslation, *dpp_req);
+                        statsDMP.dmp_pfIdentified++;
                     }
                 
                     data_offset += 4;
@@ -154,6 +194,18 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     if (!dpp_req) {
         dpp_req = new DeferredPacket(this, pfi, 0, 0);
     }
+
+    if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+        for (auto& rt_ent: relationTable) { 
+            if ((!rt_ent.pfi) && (rt_ent.index_pc == pkt->req->getPC()))
+            {
+                rt_ent.pfi = new PrefetchInfo(pfi, 0x0);
+                rt_ent.cID = pkt->req->contextId();
+            }
+        }
+        // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
+    }
+    
     //if (pkt->req->hasPC()) {
     //    Addr pc = pkt->req->getPC();
     //    unsigned offset = (unsigned) (pfi.getAddr() & (blkSize-1));

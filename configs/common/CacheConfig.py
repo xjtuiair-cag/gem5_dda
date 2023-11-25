@@ -336,6 +336,10 @@ def config_three_level_cache(options, system):
                 system.cpu[i].l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.cpu[i].l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
                 system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+                system.cpu[i].l2.prefetcher.use_virtual_addresses = True
+                if system.cpu[i].mmu.dtb:
+                    print("Adding DTLB to L2 prefetcher.")
+                    system.cpu[i].l2.prefetcher.registerTLB(system.cpu[i].mmu.dtb)
 
             system.cpu[i].tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
             system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports

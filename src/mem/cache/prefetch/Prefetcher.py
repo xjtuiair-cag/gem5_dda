@@ -710,6 +710,7 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         super().__init__(**kwargs)
         self._l1_simObj = NULL # Demand init by config
         self._l2_simObj = NULL # Demand init by config
+        # self._tlbs = []
     
     def set_probe_obj(self, l1_simObj, l2_simObj):
         self._l1_simObj = l1_simObj
@@ -718,6 +719,8 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     # Override BasePrefetcher::regProbeListeners
     # Register L1 request and response probelisteners
     def regProbeListeners(self):
+        for tlb in self._tlbs:
+            self.getCCObject().addTLB(tlb.getCCObject())
 
         # Self ProbeListener
         self.getCCObject().addEventProbe(

@@ -159,6 +159,11 @@ class Base : public ClockedObject
             return validPC;
         }
 
+        void setPC(Addr pc_in)
+        {
+            pc = pc_in;
+        }
+
         /**
          * Gets the requestor ID that generated this address
          * @return the requestor ID that generated this address

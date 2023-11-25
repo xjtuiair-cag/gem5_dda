@@ -41,25 +41,26 @@ class DiffMatching : public Stride
     int rt_ptr;
 
     template <typename T>
-    struct DeltaTableEntry
+    class DeltaTableEntry
     {
         Addr pc;
+        bool valid;
         T last;
-        std::vector<T> diff;
 
         int diff_ptr;
-        bool valid;
         const int diff_size;
+        std::vector<T> diff;
 
+      public:
         DeltaTableEntry(Addr pc, T last, int diff_size, bool valid)
-          : pc(pc), last(last), diff_ptr(0), diff_size(diff_size), valid(valid)
-        {}
+          : pc(pc), last(last), diff_ptr(0), diff_size(diff_size), 
+            valid(valid), diff(diff_size) {};
         ~DeltaTableEntry() = default;
 
         void invalidate ()
         {
             diff_ptr = 0; valid = false;
-        }
+        };
 
         void fill (T last_in)
         {
@@ -70,19 +71,30 @@ class DiffMatching : public Stride
                 diff_ptr = (diff_ptr+1) % diff_size;
             }
             last = last_in;
-        }
+        };
 
-        void renew (Addr pc_new, T last_new, int diff_size_new, bool valid_new)
+        T& operator[](int index) { return diff[ (diff_ptr+index) % diff_size ]; };
+
+        void renew (Addr pc_new, T last_new, bool valid_new)
         {
             pc = pc_new;
             last = last_new;
-            diff_size = diff_size_new;
             valid = valid_new;
-        }
+            diff_ptr = 0;
+        };
     };
 
     std::vector<DeltaTableEntry<IndexData>> indexDataDeltaTable;
     std::vector<DeltaTableEntry<Addr>> targetAddrDeltaTable;
+
+    struct IndirectCandidateSelectionEntry
+    {
+        bool valid;
+        Addr subscribe_pc;
+        
+
+    };
+    std::vector<IndirectCandidateSelectionEntry> indirectCandidateSelection;
 
 
     struct RelationTableEntry
@@ -93,13 +105,20 @@ class DiffMatching : public Stride
         unsigned int shift;
         bool range;
         int range_degree;
+        ContextID cID;
+        PrefetchInfo *pfi;
 
         RelationTableEntry(
             Addr index_pc, Addr target_pc, Addr target_base_addr, 
-            unsigned int shift, bool range, int range_degree
+            unsigned int shift, bool range, int range_degree, ContextID cID
         ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
-            shift(shift), range(range), range_degree(range_degree)
+            shift(shift), range(range), range_degree(range_degree), cID(cID), pfi(nullptr)
         {}
+
+        ~RelationTableEntry() 
+        {
+            delete pfi;
+        }
     };
     std::vector<RelationTableEntry> relationTable;
 
@@ -107,6 +126,13 @@ class DiffMatching : public Stride
     // Otherwise there will be a segfault using resp packet 
     // TODO: Self built request
     DeferredPacket * dpp_req;
+
+    struct DMPStats : public statistics::Group
+    {
+        DMPStats(statistics::Group *parent);
+        // STATS
+        statistics::Scalar dmp_pfIdentified;
+    } statsDMP;
 
   public:
 

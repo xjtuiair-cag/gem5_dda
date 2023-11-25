@@ -66,6 +66,8 @@ class BaseTLB : public SimObject
 
     BaseTLB *_nextLevel;
 
+    BaseMMU* mmu;
+
   public:
     virtual void demapPage(Addr vaddr, uint64_t asn) = 0;
 
@@ -80,6 +82,8 @@ class BaseTLB : public SimObject
     {
         panic("Not implemented.\n");
     }
+
+    virtual void setMMU(BaseMMU* _mmu) { mmu = _mmu; };
 
     /**
      * Do post-translation physical address finalization.

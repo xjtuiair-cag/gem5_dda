@@ -102,6 +102,8 @@ MMU::init()
     getITBPtr()->setTableWalker(itbWalker);
     getDTBPtr()->setTableWalker(dtbWalker);
 
+    getDTBPtr()->setMMU(this);
+
     BaseMMU::init();
 
     _hasWalkCache = checkWalkCache();
