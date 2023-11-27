@@ -106,19 +106,16 @@ class DiffMatching : public Stride
         bool range;
         int range_degree;
         ContextID cID;
-        PrefetchInfo *pfi;
 
         RelationTableEntry(
             Addr index_pc, Addr target_pc, Addr target_base_addr, 
             unsigned int shift, bool range, int range_degree, ContextID cID
         ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
-            shift(shift), range(range), range_degree(range_degree), cID(cID), pfi(nullptr)
+            shift(shift), range(range), range_degree(range_degree), cID(cID)
         {}
 
         ~RelationTableEntry() 
-        {
-            delete pfi;
-        }
+        {}
     };
     std::vector<RelationTableEntry> relationTable;
 

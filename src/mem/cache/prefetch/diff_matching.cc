@@ -41,8 +41,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     // relationTable.push_back(RelationTableEntry(0x4009e0, 0x4009ec, 0xc0000000, 8, true, p.indir_range));
 
     // spmv fs
-    relationTable.push_back(RelationTableEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
-    relationTable.push_back(RelationTableEntry(0x400a28, 0x400a34, 0xc0000000, 8, true, p.indir_range, 0));
+    // relationTable.push_back(RelationTableEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
+    relationTable.push_back(RelationTableEntry(0x400a28, 0x400a34, 0xc360270, 8, true, p.indir_range, 0));
 
     rt_ptr = 2;
 }
@@ -141,6 +141,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
         /* Assume response data is a int and always occupies 4 bytes */
         const int data_stride = 4;
         const int byte_width = 8;
+        const int32_t priority = 0;
 
         /* set range_end, only process one data if not range type */
         unsigned range_end;
@@ -170,9 +171,22 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 
             /** get a fake pfi, generator pc is target_pc for chain-trigger */
             PrefetchInfo fake_pfi(pf_addr, rt_ent.target_pc, requestorId);
-            DeferredPacket dpp(this, fake_pfi, 0, 0);
             
+            /* filter repeat request */
+            if (queueFilter) {
+                if (alreadyInQueue(pfq, fake_pfi, priority)) {
+                    /* repeat address in pfi */
+                    continue;
+                }
+                if (alreadyInQueue(pfqMissingTranslation, fake_pfi, priority)) {
+                    /* repeat address in pfi */
+                    continue;
+                }
+            }
+
             /* create pkt and req for dpp, fake for later translation*/
+            DeferredPacket dpp(this, fake_pfi, 0, priority);
+
             Tick pf_time = curTick() + clockPeriod() * latency;
             dpp.createPkt(pf_addr, blkSize, requestorId, true, pf_time);
             dpp.pkt->req->setPC(rt_ent.target_pc);
@@ -181,13 +195,14 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 
             /* make translation request and set PREFETCH flag*/
             RequestPtr translation_req = std::make_shared<Request>(
-                pf_addr, blkSize, dpp.pkt->req->getFlags(), requestorId, pc,
-                rt_ent.cID);
+                pf_addr, blkSize, dpp.pkt->req->getFlags(), requestorId, 
+                rt_ent.target_pc, rt_ent.cID);
             translation_req->setFlags(Request::PREFETCH);
 
             /* set to-be-translating request, append to pfqMissingTranslation*/
             dpp.setTranslationRequest(translation_req);
             dpp.tc = cache->system->threads[translation_req->contextId()];
+
             addToQueue(pfqMissingTranslation, dpp);
             statsDMP.dmp_pfIdentified++;
         }
@@ -197,15 +212,10 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
-    if (!dpp_req) {
-        dpp_req = new DeferredPacket(this, pfi, 0, 0);
-    }
-
     if (pkt->req->hasPC() && pkt->req->hasContextId()) {
         for (auto& rt_ent: relationTable) { 
-            if ((!rt_ent.pfi) && (rt_ent.index_pc == pkt->req->getPC()))
+            if (rt_ent.index_pc == pkt->req->getPC())
             {
-                rt_ent.pfi = new PrefetchInfo(pfi, 0x0);
                 rt_ent.cID = pkt->req->contextId();
             }
         }
