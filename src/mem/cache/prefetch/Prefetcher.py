@@ -134,7 +134,7 @@ class QueuedPrefetcher(BasePrefetcher):
     cxx_class = "gem5::prefetch::Queued"
     cxx_header = "mem/cache/prefetch/queued.hh"
     latency = Param.Int(1, "Latency for generated prefetches")
-    queue_size = Param.Int(32, "Maximum number of queued prefetches")
+    queue_size = Param.Int(1024, "Maximum number of queued prefetches")
     max_prefetch_requests_with_pending_translation = Param.Int(
         32,
         "Maximum number of queued prefetches that have a missing translation",

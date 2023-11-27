@@ -83,6 +83,13 @@ Base::PrefetchInfo::PrefetchInfo(PrefetchInfo const &pfi, Addr addr)
 {
 }
 
+Base::PrefetchInfo::PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID)
+  : address(addr), pc(pc), requestorId(requestorId), validPC(true),
+    secure(true), size(0), write(false), paddress(0x0), cacheMiss(false),
+    data(nullptr)
+{
+}
+
 void
 Base::PrefetchListener::notify(const PacketPtr &pkt)
 {

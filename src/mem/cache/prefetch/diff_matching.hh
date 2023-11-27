@@ -153,7 +153,7 @@ class DiffMatching : public Stride
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;
     
-    void addDMPToQueue(std::list<DeferredPacket> &queue, DeferredPacket &dpp);
+    //void addDMPToQueue(std::list<DeferredPacket> &queue, DeferredPacket &dpp);
 };
 
 } // namespace prefetch

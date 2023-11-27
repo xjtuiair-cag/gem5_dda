@@ -131,6 +131,11 @@ class Base : public ClockedObject
             return address;
         }
 
+        void setAddr(Addr _addr)
+        {
+            address = _addr;
+        }
+
         /**
          * Returns true if the address targets the secure memory space.
          * @return true if the address targets the secure memory space.
@@ -261,6 +266,12 @@ class Base : public ClockedObject
          * @param addr the address value of the new object
          */
         PrefetchInfo(PrefetchInfo const &pfi, Addr addr);
+
+        /**
+         * Fake PrefetchInfo in order to triggering prefetch 
+         * by cache refill
+         */
+        PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID);
 
         ~PrefetchInfo()
         {

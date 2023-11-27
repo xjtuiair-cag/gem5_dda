@@ -100,91 +100,97 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
 void
 DiffMatching::notifyFill(const PacketPtr &pkt)
 {
+    /** use virtual address for prefetch */
+    assert(tlb != nullptr);
 
-    if (pkt->req->hasPC()) {
-
-        if (!pkt->validData()) {
-            DPRINTF(HWPrefetch, "notifyFill: PC %llx, PAddr %llx, no Data, %s\n", pkt->req->getPC(), pkt->req->getPaddr(), pkt->cmdString());
-            return;
-        }
-        assert(pkt->getSize() <= blkSize); 
-        uint8_t fill_data[blkSize];
-        pkt->writeData(fill_data); 
-
-        unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
-        do {
-        int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset]
-                                + (((uint64_t)fill_data[data_offset+1]) << 8)
-                                + (((uint64_t)fill_data[data_offset+2]) << 16)
-                                + (((uint64_t)fill_data[data_offset+3]) << 24));
-        DPRINTF(HWPrefetch, "notifyFill: PC %llx, PAddr %llx, Data_offset %d, Data %llx\n", pkt->req->getPC(), pkt->req->getPaddr(), data_offset, resp_data);
-
-        data_offset += 4;
-
-        } while (data_offset < blkSize);
-
-        Addr pc = pkt->req->getPC();
-        for (const auto& rt_ent: relationTable) { 
-            if (rt_ent.index_pc == pc) {
-                // Assume response data is a int and always occupies 4 bytes 
-                unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
-                assert(data_offset % 4 == 0);
-
-                unsigned range_end = std::min(data_offset + 4 * rt_ent.range_degree, blkSize);
-                do {
-                    int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset]
-                                           + (((uint64_t)fill_data[data_offset+1]) << 8)
-                                           + (((uint64_t)fill_data[data_offset+2]) << 16)
-                                           + (((uint64_t)fill_data[data_offset+3]) << 24));
-
-                    Addr pf_addr = blockAddress( resp_data*rt_ent.shift + rt_ent.target_base_addr);
-                    DPRINTF(HWPrefetch, "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
-                               pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
-                    
-                    // if (!rt_ent.pfi) break;
-                    // PrefetchInfo new_pfi(rt_ent.pfi, pf_addr);
-                    // insert(pkt, new_pfi, addr_prio.second);
-
-                    // if (!rt_ent.pfi) continue;
-
-                    // rt_ent.pfi->setAddr(pf_addr);
-                    // insertDMP(rt_ent);
-
-                    // if (dpp_req) {
-                    //     Tick pf_time = curTick() + clockPeriod() * latency;
-                    //     dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-                    //     dpp_req->pkt->req->setPC(rt_ent.index_pc);
-                    //     addDMPToQueue(pfq, *dpp_req);
-                    // }
-
-                    if (dpp_req) {
-                        assert(tlb != nullptr);
-
-                        /* create pkt and req for dpp_req, fake for later translation*/
-                        Tick pf_time = curTick() + clockPeriod() * latency;
-                        dpp_req->createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-                        dpp_req->pkt->req->setPC(rt_ent.index_pc);
-                        dpp_req->pfInfo.setPC(rt_ent.index_pc);
-
-                        /* make translation request and set PREFETCH flag*/
-                        RequestPtr translation_req = std::make_shared<Request>(
-                            pf_addr, blkSize, dpp_req->pkt->req->getFlags(), requestorId, pc,
-                            rt_ent.cID);
-                        translation_req->setFlags(Request::PREFETCH);
-
-                        /* set trans. request, append to pfqMissingTranslation*/
-                        dpp_req->setTranslationRequest(translation_req);
-                        dpp_req->tc = cache->system->threads[translation_req->contextId()];
-                        addDMPToQueue(pfqMissingTranslation, *dpp_req);
-                        statsDMP.dmp_pfIdentified++;
-                    }
-                
-                    data_offset += 4;
-                } while (rt_ent.range && data_offset < range_end);
-            }
-        }
-    } else {
+    if (!pkt->req->hasPC()) {
        DPRINTF(HWPrefetch, "notifyFill: no PC\n");
+       return;
+    }
+
+    if (!pkt->validData()) {
+        DPRINTF(HWPrefetch, "notifyFill: PC %llx, PAddr %llx, no Data, %s\n", 
+                    pkt->req->getPC(), pkt->req->getPaddr(), pkt->cmdString());
+        return;
+    }
+
+    /* get response data */
+    assert(pkt->getSize() <= blkSize); 
+    uint8_t fill_data[blkSize];
+    pkt->writeData(fill_data); 
+
+    /* prinf response data in bytes */
+    if (debug::HWPrefetch) {
+        unsigned data_offset_debug = pkt->req->getPaddr() & (blkSize-1);
+        do {
+        int64_t resp_data = (int64_t) ((uint64_t)fill_data[data_offset_debug]
+                                + (((uint64_t)fill_data[data_offset_debug+1]) << 8)
+                                + (((uint64_t)fill_data[data_offset_debug+2]) << 16)
+                                + (((uint64_t)fill_data[data_offset_debug+3]) << 24));
+        DPRINTF(HWPrefetch, "notifyFill: PC %llx, PAddr %llx, DataOffset %d, Data %llx\n", 
+                        pkt->req->getPC(), pkt->req->getPaddr(), data_offset_debug, resp_data);
+        data_offset_debug += 4;
+        } while (data_offset_debug < blkSize);
+    }
+
+    Addr pc = pkt->req->getPC();
+    for (const auto& rt_ent: relationTable) { 
+
+        if (rt_ent.index_pc != pc) continue;
+
+        /* Assume response data is a int and always occupies 4 bytes */
+        const int data_stride = 4;
+        const int byte_width = 8;
+
+        /* set range_end, only process one data if not range type */
+        unsigned range_end;
+        unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
+        if (rt_ent.range) {
+            range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
+        } else {
+            range_end = data_offset + data_stride;
+        }
+
+        /* loop for range prefetch */
+        for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
+        {
+            /* integrate fill_data[] to resp_data  */
+            uint64_t u_resp_data = 0;
+            for (int i_st = 0; i_st < data_stride; i_st++) {
+                u_resp_data = u_resp_data << byte_width;
+                u_resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
+            }
+            int64_t resp_data = static_cast<int64_t>(u_resp_data);
+
+            /* calculate target prefetch address */
+            Addr pf_addr = blockAddress(resp_data * rt_ent.shift + rt_ent.target_base_addr);
+            DPRINTF(HWPrefetch, 
+                    "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
+                    pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
+
+            /** get a fake pfi, generator pc is target_pc for chain-trigger */
+            PrefetchInfo fake_pfi(pf_addr, rt_ent.target_pc, requestorId);
+            DeferredPacket dpp(this, fake_pfi, 0, 0);
+            
+            /* create pkt and req for dpp, fake for later translation*/
+            Tick pf_time = curTick() + clockPeriod() * latency;
+            dpp.createPkt(pf_addr, blkSize, requestorId, true, pf_time);
+            dpp.pkt->req->setPC(rt_ent.target_pc);
+            dpp.pfInfo.setPC(rt_ent.target_pc);
+            dpp.pfInfo.setAddr(pf_addr);
+
+            /* make translation request and set PREFETCH flag*/
+            RequestPtr translation_req = std::make_shared<Request>(
+                pf_addr, blkSize, dpp.pkt->req->getFlags(), requestorId, pc,
+                rt_ent.cID);
+            translation_req->setFlags(Request::PREFETCH);
+
+            /* set to-be-translating request, append to pfqMissingTranslation*/
+            dpp.setTranslationRequest(translation_req);
+            dpp.tc = cache->system->threads[translation_req->contextId()];
+            addToQueue(pfqMissingTranslation, dpp);
+            statsDMP.dmp_pfIdentified++;
+        }
     }
 }
 
@@ -206,18 +212,6 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
     }
     
-    //if (pkt->req->hasPC()) {
-    //    Addr pc = pkt->req->getPC();
-    //    unsigned offset = (unsigned) (pfi.getAddr() & (blkSize-1));
-    //    if (access_offset.count(pc) == 0) {
-    //        std::queue<unsigned> temp;
-    //        temp.push(offset);
-    //        access_offset[pc] = temp;
-    //    } else {
-    //        access_offset[pc].push(offset);
-    //    }
-    //    //DPRINTF(HWPrefetch, "Notify: offset register: %d\n", offset);
-    //}
     if (pfi.isCacheMiss()) {
         // Miss
         DPRINTF(HWPrefetch, "notify::CacheMiss: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
@@ -242,53 +236,6 @@ void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {
     Stride::calculatePrefetch(pfi, addresses);
-}
-
-void
-DiffMatching::addDMPToQueue(std::list<DeferredPacket> &queue,
-                             DeferredPacket &dpp)
-{
-    /* Verify prefetch buffer space for request */
-    if (queue.size() == queueSize) {
-        statsQueued.pfRemovedFull++;
-        /* Lowest priority packet */
-        iterator it = queue.end();
-        panic_if (it == queue.begin(),
-            "Prefetch queue is both full and empty!");
-        --it;
-        /* Look for oldest in that level of priority */
-        panic_if (it == queue.begin(),
-            "Prefetch queue is full with 1 element!");
-        iterator prev = it;
-        bool cont = true;
-        /* While not at the head of the queue */
-        while (cont && prev != queue.begin()) {
-            prev--;
-            /* While at the same level of priority */
-            cont = prev->priority == it->priority;
-            if (cont)
-                /* update pointer */
-                it = prev;
-        }
-        DPRINTF(HWPrefetch, "Prefetch queue full, removing lowest priority "
-                            "oldest packet, addr: %#x\n",it->pfInfo.getAddr());
-        delete it->pkt;
-        queue.erase(it);
-    }
-
-    if ((queue.size() == 0) || (dpp <= queue.back())) {
-        queue.emplace_back(dpp);
-    } else {
-        iterator it = queue.end();
-        do {
-            --it;
-        } while (it != queue.begin() && dpp > *it);
-        /* If we reach the head, we have to see if the new element is new head
-         * or not */
-        if (it == queue.begin() && dpp <= *it)
-            it++;
-        queue.insert(it, dpp);
-    }
 }
 
 } // namespace prefetch

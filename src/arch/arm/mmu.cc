@@ -1461,8 +1461,8 @@ MMU::getTE(TlbEntry **te, const RequestPtr &req, ThreadContext *tc, Mode mode,
             // any further with the memory access (here we can safely use the
             // fault status for the short desc. format in all cases)
            stats.prefetchFaults++;
-           return std::make_shared<PrefetchAbort>(
-               vaddr_tainted, ArmFault::PrefetchTLBMiss, state.isStage2);
+           //return std::make_shared<PrefetchAbort>(
+           //    vaddr_tainted, ArmFault::PrefetchTLBMiss, state.isStage2);
         }
 
         // start translation table walk, pass variables rather than
