@@ -157,7 +157,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
         {
             /* integrate fill_data[] to resp_data  */
             uint64_t u_resp_data = 0;
-            for (int i_st = 0; i_st < data_stride; i_st++) {
+            for (int i_st = data_stride-1; i_st >= 0; i_st--) {
                 u_resp_data = u_resp_data << byte_width;
                 u_resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
             }
