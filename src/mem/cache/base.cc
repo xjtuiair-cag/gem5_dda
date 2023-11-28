@@ -53,6 +53,7 @@
 #include "debug/CacheRepl.hh"
 #include "debug/CacheVerbose.hh"
 #include "debug/HWPrefetch.hh"
+#include "debug/RequestSlot.hh"
 #include "mem/cache/compressors/base.hh"
 #include "mem/cache/mshr.hh"
 #include "mem/cache/prefetch/base.hh"
@@ -861,12 +862,14 @@ BaseCache::getNextQueueEntry()
 
         if (conflict_mshr && conflict_mshr->order < wq_entry->order) {
             // Service misses in order until conflict is cleared.
+            DPRINTF(RequestSlot, "[Ready] WB full and conflicted with MSHR: %s\n", conflict_mshr->print());
             return conflict_mshr;
 
             // @todo Note that we ignore the ready time of the conflict here
         }
 
         // No conflicts; issue write
+        DPRINTF(RequestSlot, "[Ready] WB full and no conflicted MSHR: %s\n", wq_entry->print());
         return wq_entry;
     } else if (miss_mshr) {
         // need to check for conflicting earlier writeback
@@ -884,20 +887,33 @@ BaseCache::getNextQueueEntry()
             // should we return wq_entry here instead?  I.e. do we
             // have to flush writes in order?  I don't think so... not
             // for Alpha anyway.  Maybe for x86?
+            DPRINTF(RequestSlot, "[Ready] MSHR conflicted with WB: %s\n", conflict_mshr->print());
             return conflict_mshr;
 
             // @todo Note that we ignore the ready time of the conflict here
         }
 
         // No conflicts; issue read
+        DPRINTF(RequestSlot, "[Ready] MSHR fine with WB: %s\n", miss_mshr->print());
         return miss_mshr;
     }
 
     // fall through... no pending requests.  Try a prefetch.
     assert(!miss_mshr && !wq_entry);
+
+    // for debug trace
+    if (!prefetcher) 
+        DPRINTF(RequestSlot, "[Failed] No available prefetcher\n");
+    else if (isBlocked()) 
+        DPRINTF(RequestSlot, "[Blocked] Cache Blocked\n");
+    else if (mshrQueue.canPrefetch()) 
+        DPRINTF(RequestSlot, "[Failed] MSHR resource not enough\n");
+
+    // do prefetch try
     while (prefetcher && mshrQueue.canPrefetch() && !isBlocked()) {
         // If we have a miss queue slot, we can try a prefetch
         PacketPtr pkt = prefetcher->getPacket();
+        DPRINTF(RequestSlot, "[Ready] Prefetch chance: may drop, check debug::HWPrefetch\n");
         if (pkt) {
             Addr pf_addr = pkt->getBlockAddr(blkSize);
             if (tags->findBlock(pf_addr, pkt->isSecure())) {
@@ -2688,6 +2704,8 @@ BaseCache::CacheReqPacketQueue::sendDeferredPacket()
     // their own events
     if (!waitingOnRetry) {
         schedSendEvent(cache.nextQueueReadyTime());
+    } else {
+        DPRINTF(RequestSlot, "[Failed] Waiting on retry\n");
     }
 }
 
