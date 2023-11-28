@@ -368,8 +368,10 @@ void
 Packet::print(std::ostream &o, const int verbosity,
               const std::string &prefix) const
 {
-    ccprintf(o, "%s%s [%x:%x]%s%s%s%s%s%s", prefix, cmdString(),
+    ccprintf(o, "%s%s [%x:%x] [PC:0x%x] [ReqVA:0x%x] %s%s%s%s%s%s", prefix, cmdString(),
              getAddr(), getAddr() + getSize() - 1,
+             req->hasPC() ? req->getPC() : 0,
+             req->hasVaddr() ? req->getVaddr() : 0,
              req->isSecure() ? " (s)" : "",
              req->isInstFetch() ? " IF" : "",
              req->isUncacheable() ? " UC" : "",

@@ -905,32 +905,34 @@ BaseCache::getNextQueueEntry()
     if (!prefetcher) 
         DPRINTF(RequestSlot, "[Failed] No available prefetcher\n");
     else if (isBlocked()) 
-        DPRINTF(RequestSlot, "[Blocked] Cache Blocked\n");
-    else if (mshrQueue.canPrefetch()) 
+        DPRINTF(RequestSlot, "[Failed] Cache Blocked\n");
+    else if (!mshrQueue.canPrefetch()) 
         DPRINTF(RequestSlot, "[Failed] MSHR resource not enough\n");
 
     // do prefetch try
-    while (prefetcher && mshrQueue.canPrefetch() && !isBlocked()) {
+    if (prefetcher && mshrQueue.canPrefetch() && !isBlocked()) {
         // If we have a miss queue slot, we can try a prefetch
         PacketPtr pkt = prefetcher->getPacket();
-        DPRINTF(RequestSlot, "[Ready] Prefetch chance: may drop, check debug::HWPrefetch\n");
         if (pkt) {
             Addr pf_addr = pkt->getBlockAddr(blkSize);
             if (tags->findBlock(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in cache, "
                         "dropped.\n", pf_addr);
+                DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInCache();
                 // free the request and packet
                 delete pkt;
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in a MSHR, "
                         "dropped.\n", pf_addr);
+                DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInMSHR();
                 // free the request and packet
                 delete pkt;
             } else if (writeBuffer.findMatch(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in the "
                         "Write Buffer, dropped.\n", pf_addr);
+                DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInWB();
                 // free the request and packet
                 delete pkt;
@@ -943,10 +945,12 @@ BaseCache::getNextQueueEntry()
                 // allocate an MSHR and return it, note
                 // that we send the packet straight away, so do not
                 // schedule the send
+                DPRINTF(RequestSlot, "[Ready] Prefetch chance: may drop, check debug::HWPrefetch\n");
                 return allocateMissBuffer(pkt, curTick(), false);
             }
         } else {
-            break;
+            //break;
+            DPRINTF(RequestSlot, "[Failed] No available prefetch pkt\n");
         }
     }
 
