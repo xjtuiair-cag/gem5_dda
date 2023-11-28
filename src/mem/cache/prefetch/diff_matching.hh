@@ -122,7 +122,7 @@ class DiffMatching : public Stride
     // Capture a normal request packet to generate prefetch with resp data.
     // Otherwise there will be a segfault using resp packet 
     // TODO: Self built request
-    DeferredPacket * dpp_req;
+    // DeferredPacket * dpp_req;
 
     struct DMPStats : public statistics::Group
     {
@@ -150,7 +150,6 @@ class DiffMatching : public Stride
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;
     
-    //void addDMPToQueue(std::list<DeferredPacket> &queue, DeferredPacket &dpp);
 };
 
 } // namespace prefetch

@@ -22,7 +22,6 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     iddt_ptr(0),
     tadt_ptr(0),
     rt_ptr(0),
-    dpp_req(nullptr),
     statsDMP(this)
 {
     // temp for testing sssp prefetching generation
@@ -49,7 +48,6 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
 
 DiffMatching::~DiffMatching()
 {
-    delete dpp_req;
 }
 
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
