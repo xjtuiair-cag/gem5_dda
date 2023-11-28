@@ -246,6 +246,7 @@ Queued::getPacket()
     }
 
     if (pfq.empty()) {
+        statsQueued.pfTransFailed += 1;
         DPRINTF(HWPrefetch, "No hardware prefetches available.\n");
         return nullptr;
     }
@@ -278,7 +279,10 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
     ADD_STAT(pfSpanPage, statistics::units::Count::get(),
              "number of prefetches that crossed the page"),
     ADD_STAT(pfUsefulSpanPage, statistics::units::Count::get(),
-             "number of prefetches that is useful and crossed the page")
+             "number of prefetches that is useful and crossed the page"),
+    ADD_STAT(pfTransFailed, statistics::units::Count::get(),
+             "number of pfq empty and translation not avaliable immediately "
+             "when there is a chance for prefetch")
 {
 }
 
