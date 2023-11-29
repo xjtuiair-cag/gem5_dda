@@ -2574,6 +2574,11 @@ BaseCache::CpuSidePort::tryTiming(PacketPtr pkt)
         return true;
     } else if (blocked || mustSendRetry) {
         // either already committed to send a retry, or blocked
+        DPRINTF(
+            CachePort, "tryTiming failed [blocked:%d] [mustSendRetry:%d]",
+                        blocked ? 1 : 0,
+                        mustSendRetry ? 1 : 0
+        );
         mustSendRetry = true;
         return false;
     }
