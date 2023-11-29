@@ -2707,7 +2707,9 @@ BaseCache::CacheReqPacketQueue::sendDeferredPacket()
     // snoop responses have their own packet queue and thus schedule
     // their own events
     if (!waitingOnRetry) {
-        schedSendEvent(cache.nextQueueReadyTime());
+        Tick next_send_time = cache.nextQueueReadyTime();
+        DPRINTF(RequestSlot, "[Schedule] Next send time: %lld\n", next_send_time);
+        schedSendEvent(next_send_time);
     } else {
         DPRINTF(RequestSlot, "[Failed] Waiting on retry\n");
     }
