@@ -201,7 +201,8 @@ class O3_ARM_v7aL2(Cache):
     assoc = 8
     write_buffers = 8
     prefetch_on_access = True
-    clusivity = "mostly_excl"
+    #clusivity = "mostly_excl"
+    clusivity = "mostly_incl"
     # Simple stride prefetcher
     #prefetcher = StridePrefetcher(degree=8, latency=1)
     tags = BaseSetAssoc()
