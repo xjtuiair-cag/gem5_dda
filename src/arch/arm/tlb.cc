@@ -61,6 +61,7 @@ using namespace ArmISA;
 TLB::TLB(const ArmTLBParams &p)
     : BaseTLB(p), table(new TlbEntry[p.size]), size(p.size),
       isStage2(p.is_stage2),
+      pf_translation_timing(p.pf_translation_timing),
       _walkCache(false),
       tableWalker(nullptr),
       stats(*this), rangeMRU(1), vmid(0)

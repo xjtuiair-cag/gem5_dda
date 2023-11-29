@@ -52,6 +52,10 @@ class ArmTLB(BaseTLB):
     sys = Param.System(Parent.any, "system object parameter")
     size = Param.Int(64, "TLB size")
     is_stage2 = Param.Bool(False, "Is this a stage 2 TLB?")
+    pf_translation_timing = Param.Bool(
+        False, 
+        "timing  or functional for prefetch translation."
+    )
 
     partial_levels = VectorParam.ArmLookupLevel(
         [],

@@ -110,6 +110,9 @@ class TLB : public BaseTLB
     /** Indicates this TLB caches IPA->PA translations */
     bool isStage2;
 
+    /** Indicate if prefetch translation is timing */
+    bool pf_translation_timing;
+
     /**
      * Hash map containing one entry per lookup level
      * The TLB is caching partial translations from the key lookup level
@@ -235,14 +238,14 @@ class TLB : public BaseTLB
                     BaseMMU::Translation *translation,
                     BaseMMU::Mode mode) override
     {
-        /* do timing translation, prefetch TLB miss filter?*/ 
-        // mmu->translateTiming(req, tc, translation, mode);
-
-        /* do functional translation, call finish() */
-        Fault pf_trans_fault = mmu->translateFunctional(req, tc, mode);
-        translation->finish(pf_trans_fault, req, tc, mode);
-
-
+        if (pf_translation_timing) {
+          /* do timing translation, prefetch TLB miss filter?*/ 
+          mmu->translateTiming(req, tc, translation, mode);
+        } else {
+          /* do functional translation, call finish() */
+          Fault pf_trans_fault = mmu->translateFunctional(req, tc, mode);
+          translation->finish(pf_trans_fault, req, tc, mode);
+        }
         // panic("unimplemented");
     }
 
