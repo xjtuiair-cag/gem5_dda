@@ -1879,6 +1879,15 @@ BaseCache::nextQueueReadyTime() const
                              prefetcher->nextPrefetchReadyTime());
     }
 
+    DPRINTF(
+        RequestSlot, 
+        "[Schedule] Next send time: %lld MSHR: %lld WB: %lld PF: %lld\n", 
+        nextReady, 
+        mshrQueue.nextReadyTime(), 
+        writeBuffer.nextReadyTime(), 
+        prefetcher ? prefetcher->nextPrefetchReadyTime() : MaxTick
+    );
+
     return nextReady;
 }
 
@@ -2707,9 +2716,7 @@ BaseCache::CacheReqPacketQueue::sendDeferredPacket()
     // snoop responses have their own packet queue and thus schedule
     // their own events
     if (!waitingOnRetry) {
-        Tick next_send_time = cache.nextQueueReadyTime();
-        DPRINTF(RequestSlot, "[Schedule] Next send time: %lld\n", next_send_time);
-        schedSendEvent(next_send_time);
+        schedSendEvent(cache.nextQueueReadyTime());
     } else {
         DPRINTF(RequestSlot, "[Failed] Waiting on retry\n");
     }
