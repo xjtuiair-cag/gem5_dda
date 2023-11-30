@@ -696,7 +696,7 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     iddt_ent_num = Param.Unsigned(16, "Number of entries of iddt")
     tadt_ent_num = Param.Unsigned(16, "Number of entries of tadt")
     rt_ent_num = Param.Unsigned(16, "Number of entries of rt")
-    iddt_diff_num = Param.Unsigned(3, "Number of difference entries of iddt")
+    iddt_diff_num = Param.Unsigned(8, "Number of difference entries of iddt")
     tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")
 
     stream_ahead_dist = Param.Unsigned(

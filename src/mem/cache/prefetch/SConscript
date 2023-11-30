@@ -55,3 +55,5 @@ Source('spatio_temporal_memory_streaming.cc')
 Source('stride.cc')
 Source('tagged.cc')
 Source('diff_matching.cc')
+
+DebugFlag('DMP')

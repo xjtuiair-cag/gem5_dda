@@ -3,6 +3,7 @@
 #include "mem/cache/base.hh"
 
 #include "debug/HWPrefetch.hh"
+#include "debug/DMP.hh"
 #include "params/DiffMatchingPrefetcher.hh"
 
 namespace gem5
@@ -24,26 +25,16 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ptr(0),
     statsDMP(this)
 {
-    // temp for testing sssp prefetching generation
-    // relationTable.push_back(RelationTableEntry(0x400a10, 0x400a1c, 0xa0000000, 4, false));
-    // relationTable.push_back(RelationTableEntry(0x400a1c, 0x400a40, 0xb0000000, 4, true));
-    // relationTable.push_back(RelationTableEntry(0x400a1c, 0x400a48, 0xe0000000, 8, true));
-    // relationTable.push_back(RelationTableEntry(0x400a40, 0x400a54, 0x90000000, 4, false));
-    // rt_ptr=4;
-
-    // temp for testing spmv prefetching generation
-
-    // relationTable.push_back(RelationTableEntry(0x400998, 0x4009b0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
-    // relationTable.push_back(RelationTableEntry(0x4009b0, 0x4009bc, 0xc0000000, 8, true, p.indir_range));
-
-    // relationTable.push_back(RelationTableEntry(0x4009c8, 0x4009e0, 0x80000000 + p.stream_ahead_dist, 4, false, 0));
-    // relationTable.push_back(RelationTableEntry(0x4009e0, 0x4009ec, 0xc0000000, 8, true, p.indir_range));
-
     // spmv fs
-    // relationTable.push_back(RelationTableEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
-    relationTable.push_back(RelationTableEntry(0x400a28, 0x400a34, 0xc360270, 8, true, p.indir_range, 0));
+    // relationTable.push_back(RTEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
+    // relationTable.emplace_back(0x400a28, 0x400a34, 0xc360270, 3, true, p.indir_range, 0);
 
-    rt_ptr = 2;
+    // rt_ptr = 1;
+
+    indexDataDeltaTable.emplace_back(0x400a28, 0, iddt_diff_num);
+    targetAddrDeltaTable.emplace_back(0x400a34, 0, tadt_diff_num);
+    indexDataDeltaTable[0].validate();
+    targetAddrDeltaTable[0].validate();
 }
 
 DiffMatching::~DiffMatching()
@@ -58,8 +49,134 @@ DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
 }
 
 void
+DiffMatching::diffMatching(const DiffMatching::tadt_ent_t& tadt_ent)
+{
+    // ready flag check 
+    assert(tadt_ent.isValid() && tadt_ent.isReady());
+
+    ContextID tadt_ent_cID = tadt_ent.getContextId();
+
+    // try to match all valid and ready index data diff-sequence 
+    for (const auto& iddt_ent : indexDataDeltaTable) {
+        if (!iddt_ent.isValid() || !iddt_ent.isReady()) continue;
+        if (tadt_ent_cID != iddt_ent.getContextId()) continue;
+        
+        // a specific index data diff-sequence may have multiple matching point  
+        for (int i_start = 0; i_start < iddt_diff_num-tadt_diff_num+1; i_start++) {
+
+            // try different shift values
+            for (unsigned int shift_try: shift_v) {
+                int t_start = 0;
+                while (t_start < tadt_diff_num) {
+                    if (iddt_ent[i_start+t_start] != (tadt_ent[t_start] >> shift_try)) {
+                        break;
+                    }
+                    t_start++;
+                }
+
+                if (t_start == tadt_diff_num) {
+                    // match success
+                    // insert pattern to RelationTable
+                    insertRTE(iddt_ent, tadt_ent, i_start+tadt_diff_num, shift_try, tadt_ent_cID);
+                }
+
+            }
+        }
+
+    }
+}
+
+bool
+DiffMatching::findRTE(Addr index_pc, Addr target_pc, ContextID cID)
+{
+    for (const auto& rte : relationTable)
+    {
+        if ( rte.index_pc == index_pc && 
+             rte.target_pc == target_pc && 
+             rte.cID == cID) {
+            return true; 
+        }
+    }
+    return false;
+}
+
+DiffMatching::RTEntry*
+DiffMatching::insertRTE(
+    const DiffMatching::iddt_ent_t& iddt_ent_match, 
+    const DiffMatching::tadt_ent_t& tadt_ent_match,
+    int iddt_match_point, unsigned int shift, ContextID cID)
+{
+    // calculate the target base address
+    IndexData data_match = iddt_ent_match.getLast();
+    for (int i = 0; i < iddt_match_point; i++) {
+        data_match += iddt_ent_match[i];
+    }
+
+    TargetAddr addr_match = tadt_ent_match.getLast();
+
+    int64_t base_addr_tmp = addr_match - (data_match << shift);
+
+    DPRINTF(DMP, "Matched: Data %llx Addr %llx Shift %d\n", data_match, addr_match, shift);
+    
+    assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+    Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
+
+    Addr new_index_pc = iddt_ent_match.getPC();
+    Addr new_target_pc = tadt_ent_match.getPC();
+
+    if (findRTE(new_index_pc, new_target_pc, cID)) {
+        return nullptr;
+    }
+
+    DPRINTF(DMP, "Insert RelationTable: "
+        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d\n",
+        new_index_pc, new_target_pc, target_base_addr, shift, cID
+    );
+
+    RTEntry new_rte (
+        new_index_pc,
+        new_target_pc,
+        target_base_addr,
+        shift,
+        false, // TODO: dynamic detection
+        0, // TODO: dynamic detection
+        cID
+    );
+
+    if (relationTable.size() < rt_ent_num) {
+        relationTable.push_back(new_rte);
+        return &relationTable.back();
+    } else {
+        RTEntry* brand_new_ent = relationTable[rt_ptr].update(new_rte);
+        rt_ptr = (rt_ptr+1) % rt_ent_num;
+        return brand_new_ent;
+    }
+}
+
+void
 DiffMatching::notifyL1Req(const PacketPtr &pkt) 
 {  
+
+    // update TADT
+    if (!pkt->req->hasPC() || !pkt->req->hasVaddr()) {
+        return;
+    }
+
+    Addr req_addr = pkt->req->getVaddr();
+    for (auto& tadt_ent: targetAddrDeltaTable) {
+        if (tadt_ent.getPC() == pkt->req->getPC() && tadt_ent.isValid()) {
+            assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+            tadt_ent.fill(
+                static_cast<TargetAddr>(pkt->req->getVaddr()),
+                pkt->req->hasContextId() ? pkt->req->contextId() : 0
+            ); 
+
+            if (tadt_ent.isReady()) {
+                diffMatching(tadt_ent);
+            }
+        }
+    }
+
     DPRINTF(HWPrefetch, "notifyL1Req: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n",
                         pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
                         pkt->getAddr(), 
@@ -70,29 +187,43 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
 void
 DiffMatching::notifyL1Resp(const PacketPtr &pkt) 
 {
-    if (pkt->req->hasPC()) {
-        
-        if (!pkt->validData()) {
-            DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, no Data, %s\n", pkt->req->getPC(), pkt->req->getPaddr(), pkt->cmdString());
-            return;
-        }
-
-        assert(pkt->getSize() <= blkSize); 
-        uint8_t data[pkt->getSize()];
-        pkt->writeData(data); 
-
-        uint32_t resp_data = ((uint64_t)data[0]
-                                + (((uint64_t)data[1]) << 8)
-                                + (((uint64_t)data[2]) << 16)
-                                + (((uint64_t)data[3]) << 24));
-
-        DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
-                            pkt->req->getPC(), pkt->req->getPaddr(), 
-                            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
-                            pkt->getSize(), resp_data);
-    } else {
+    if (!pkt->req->hasPC()) {
        DPRINTF(HWPrefetch, "notifyL1Resp: no PC\n");
+       return;
     }
+        
+    if (!pkt->validData()) {
+        DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, no Data, %s\n", 
+                                pkt->req->getPC(), pkt->req->getPaddr(), pkt->cmdString());
+        return;
+    }
+
+    assert(pkt->getSize() <= blkSize); 
+    uint8_t data[pkt->getSize()];
+    pkt->writeData(data); 
+
+    const int data_stride = 4;
+    const int byte_width = 8;
+    uint64_t resp_data = 0;
+    for (int i_st = data_stride-1; i_st >= 0; i_st--) {
+        resp_data = resp_data << byte_width;
+        resp_data += static_cast<uint64_t>(data[i_st]);
+    }
+    assert(resp_data <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+
+    // update IDDT
+    for (auto& iddt_ent: indexDataDeltaTable) {
+        if (iddt_ent.getPC() == pkt->req->getPC() && iddt_ent.isValid()) {
+            IndexData new_data;
+            std::memcpy(&new_data, &resp_data, sizeof(int64_t));
+            iddt_ent.fill(new_data, pkt->req->hasContextId() ? pkt->req->contextId() : 0);
+        }
+    }
+
+    DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
+                        pkt->req->getPC(), pkt->req->getPaddr(), 
+                        pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
+                        pkt->getSize(), resp_data);
 }
 
 void
@@ -153,16 +284,15 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
         /* loop for range prefetch */
         for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
         {
-            /* integrate fill_data[] to resp_data  */
-            uint64_t u_resp_data = 0;
+            /* integrate fill_data[] to resp_data (considered as unsigned)  */
+            uint64_t resp_data = 0;
             for (int i_st = data_stride-1; i_st >= 0; i_st--) {
-                u_resp_data = u_resp_data << byte_width;
-                u_resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
+                resp_data = resp_data << byte_width;
+                resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
             }
-            int64_t resp_data = static_cast<int64_t>(u_resp_data);
 
             /* calculate target prefetch address */
-            Addr pf_addr = blockAddress(resp_data * rt_ent.shift + rt_ent.target_base_addr);
+            Addr pf_addr = blockAddress((resp_data << rt_ent.shift) + rt_ent.target_base_addr);
             DPRINTF(HWPrefetch, 
                     "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
