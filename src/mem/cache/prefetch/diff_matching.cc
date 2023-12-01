@@ -18,6 +18,7 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     iddt_ent_num(p.iddt_ent_num),
     tadt_ent_num(p.tadt_ent_num),
     rt_ent_num(p.rt_ent_num),
+    indir_range(p.indir_range),
     iddt_diff_num(p.iddt_diff_num),
     tadt_diff_num(p.tadt_diff_num),
     iddt_ptr(0),
@@ -108,15 +109,16 @@ DiffMatching::insertRTE(
 {
     // calculate the target base address
     IndexData data_match = iddt_ent_match.getLast();
-    for (int i = 0; i < iddt_match_point; i++) {
-        data_match += iddt_ent_match[i];
+    for (int i = iddt_match_point; i < iddt_diff_num; i++) {
+        data_match -= iddt_ent_match[i];
     }
 
     TargetAddr addr_match = tadt_ent_match.getLast();
 
     int64_t base_addr_tmp = addr_match - (data_match << shift);
 
-    DPRINTF(DMP, "Matched: Data %llx Addr %llx Shift %d\n", data_match, addr_match, shift);
+    DPRINTF(DMP, "Matched: LastData %llx Data %llx Addr %llx Shift %d\n", 
+               iddt_ent_match.getLast(), data_match, addr_match, shift);
     
     assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
@@ -138,8 +140,8 @@ DiffMatching::insertRTE(
         new_target_pc,
         target_base_addr,
         shift,
-        false, // TODO: dynamic detection
-        0, // TODO: dynamic detection
+        true, // TODO: dynamic detection
+        16, // TODO: dynamic detection
         cID
     );
 

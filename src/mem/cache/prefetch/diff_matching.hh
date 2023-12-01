@@ -32,6 +32,9 @@ class DiffMatching : public Stride
     const int tadt_ent_num;
     const int rt_ent_num;
 
+    // indirect range prefetch length
+    int indir_range;
+
     // possiable shift values
     const unsigned int shift_v[4] = {0, 1, 2, 3};
 
