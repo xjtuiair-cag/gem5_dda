@@ -169,7 +169,7 @@ class GicV2(BaseGic):
     it_lines = Param.UInt32(
         128, "Number of interrupt lines supported (max = 1020)"
     )
-    gem5_extensions = Param.Bool(False, "Enable gem5 extensions")
+    gem5_extensions = Param.Bool(True, "Enable gem5 extensions")
 
 
 class Gic400(GicV2):
