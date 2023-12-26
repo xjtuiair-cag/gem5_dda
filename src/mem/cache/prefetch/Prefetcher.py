@@ -706,6 +706,14 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         4, "Size of indirect prefetch range, limited by Cache blkSize" 
     )
 
+    range_unit = Param.Unsigned(
+        8, "Size of each range quantification unit"
+    )
+
+    range_level = Param.Unsigned(
+        4, "Number of total range quantification levels"
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._l1_simObj = NULL # Demand init by config
