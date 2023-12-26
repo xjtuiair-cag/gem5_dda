@@ -344,7 +344,7 @@ def config_three_level_cache(options, system):
                 system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
             # enable VA for all prefetcher
-            if system.cpu[i].l2.prefetcher:
+            if options.l2_hwp_type:
                 system.cpu[i].l2.prefetcher.use_virtual_addresses = True
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to L2 prefetcher.")
