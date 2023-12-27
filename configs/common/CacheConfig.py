@@ -108,7 +108,7 @@ def config_cache(options, system):
 
     if options.cpu_type == "O3_ARM_v7a_3":
         try:
-            import cores.arm.O3_ARM_v7a as core
+            import cores.arm.O3_ARM_v7a_three_level as core
         except:
             print("O3_ARM_v7a_3 is unavailable. Did you compile the O3 model?")
             sys.exit(1)
@@ -230,6 +230,35 @@ def config_cache(options, system):
 
         system.cpu[i].createInterruptController()
         if options.l2cache:
+            assert(i==0) # only support single core 
+            if options.l2_hwp_type == "StridePrefetcher":
+                system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+            if options.l2_hwp_type == "IrregularStreamBufferPrefetcher":
+                system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+            if options.l2_hwp_type == "DiffMatchingPrefetcher":
+                system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2)
+                system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+                system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+                system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+
+                if options.dmp_init_bench:
+                    system.l2.prefetcher.index_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][0]
+                    system.l2.prefetcher.target_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][1]
+                    system.l2.prefetcher.range_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][2]
+
+            # enable VA for all prefetcher
+            if options.l2_hwp_type:
+                system.l2.prefetcher.use_virtual_addresses = True
+                if system.cpu[i].mmu.dtb:
+                    print("Adding DTLB to L2 prefetcher.")
+                    system.l2.prefetcher.registerTLB(system.cpu[i].mmu.dtb)
+
             system.cpu[i].connectAllPorts(
                 system.tol2bus.cpu_side_ports,
                 system.membus.cpu_side_ports,
