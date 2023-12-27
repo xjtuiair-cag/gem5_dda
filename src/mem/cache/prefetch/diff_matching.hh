@@ -136,10 +136,11 @@ class DiffMatching : public Stride
         // NOTE: [TODO] more suitable RangePrefetc schedule policy
         std::vector<int> sample_count;
 
+      public:
         RangeTableEntry(
                 Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
-            ) :  target_PC(target_PC), cur_tail(req_addr), shift_times(shift_times),
-                cur_count(0), range_quant_level(rql), range_quant_unit(rqu),
+            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), 
+                shift_times(shift_times), range_quant_unit(rqu), range_quant_level(rql), 
                 sample_count(rql, 0) {}
 
         bool updateSample(Addr addr_in); 
@@ -151,9 +152,7 @@ class DiffMatching : public Stride
 
     };
 
-    std::unordered_map<Addr, RangeTableEntry> RT_shift_0;
-    std::unordered_map<Addr, RangeTableEntry> RT_shift_2;
-    std::unordered_map<Addr, RangeTableEntry> RT_shift_3;
+    std::vector<RangeTableEntry *> rangeTable;
 
     /** Range quantification method
     * eg. unit=8, level=4
@@ -239,7 +238,6 @@ class DiffMatching : public Stride
     void diffMatching(const tadt_ent_t& tadt_ent);
 
   public:
-
     DiffMatching(const DiffMatchingPrefetcherParams &p);
     ~DiffMatching();
 

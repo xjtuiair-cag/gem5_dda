@@ -23,25 +23,48 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     tadt_diff_num(p.tadt_diff_num),
     iddt_ptr(0),
     tadt_ptr(0),
-    rt_ptr(0),
     range_unit_param(p.range_unit),
     range_level_param(p.range_level),
+    rt_ptr(0),
     statsDMP(this)
 {
-    // spmv fs
-    // relationTable.push_back(RTEntry(0x400a10, 0x400a28, 0x80000000 + p.stream_ahead_dist, 4, false, 0, 0));
-    // relationTable.emplace_back(0x400a28, 0x400a34, 0xc360270, 3, true, p.indir_range, 0);
+    // init IDDT
+    if (!p.index_pc_init.empty()) {
+        for (auto index_pc : p.index_pc_init) {
+            indexDataDeltaTable.emplace_back(index_pc, 0, iddt_diff_num);
+            indexDataDeltaTable.back().validate();
+            iddt_ptr++;
+        }
+    }
 
-    // rt_ptr = 1;
+    // init TADT
+    if (!p.target_pc_init.empty()) {
+        for (auto target_pc : p.target_pc_init) {
+            targetAddrDeltaTable.emplace_back(target_pc, 0, tadt_diff_num);
+            targetAddrDeltaTable.back().validate();
+            tadt_ptr++;
+        }
+    }
 
-    indexDataDeltaTable.emplace_back(0x400a28, 0, iddt_diff_num);
-    targetAddrDeltaTable.emplace_back(0x400a34, 0, tadt_diff_num);
-    indexDataDeltaTable[0].validate();
-    targetAddrDeltaTable[0].validate();
+    // init RangeTable
+    if (!p.range_pc_init.empty()) {
+        for (auto range_pc : p.range_pc_init) {
+            for (unsigned int shift_try: shift_v) {
+                rangeTable.push_back(
+                    new RangeTableEntry(
+                        range_pc, 0x0, shift_try, range_level_param, range_unit_param
+                    )
+                );
+            }
+        }
+    }
 }
 
 DiffMatching::~DiffMatching()
 {
+    for (auto rt_ent : rangeTable) {
+        delete rt_ent;
+    }
 }
 
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
@@ -171,18 +194,20 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
         return false;
     } 
 
-    // generate a range sample to range count
-    int sampled_level;
-    if (cur_count >= range_quant_level * range_quant_unit) {
-        sampled_level = range_quant_level;
-    } else {
-        sampled_level = (cur_count + range_quant_unit) 
-                            / range_quant_unit;
+    if (cur_count > 0) {
+        // generate a range sample to range count
+        int sampled_level;
+        if (cur_count >= range_quant_level * range_quant_unit) {
+            sampled_level = range_quant_level;
+        } else {
+            sampled_level = (cur_count + range_quant_unit) 
+                                / range_quant_unit;
+        }
+        sample_count[sampled_level-1]++;
+        cur_count = 0;
     }
-    sample_count[sampled_level-1]++;
-    cur_count = 0;
-    cur_tail = addr_shifted;
 
+    cur_tail = addr_shifted;
     return true;
 }
 
@@ -191,20 +216,14 @@ DiffMatching::rangeFilter(Addr PC_in, Addr addr_in)
 {
     bool ret = true;
 
-    // update shift 0
-    if (RT_shift_0.find(PC_in) == RT_shift_0.end()) return true;
-    bool shift_0_ret = RT_shift_0[PC_in].updateSample(addr_in);
-    ret = ret && shift_0_ret;
+    for (auto rt_ent : rangeTable) {
+        if (rt_ent->target_PC != PC_in) continue;
 
-    // update shift 2
-    if (RT_shift_2.find(PC_in) == RT_shift_2.end()) return true;
-    bool shift_2_ret = RT_shift_2[PC_in].updateSample(addr_in);
-    ret = ret && shift_2_ret;
-
-    // update shift 3
-    if (RT_shift_3.find(PC_in) == RT_shift_3.end()) return true;
-    bool shift_3_ret = RT_shift_3[PC_in].updateSample(addr_in);
-    ret = ret && shift_3_ret;
+        DPRINTF(DMP, "updateSample: PC %llx addr %llx cur_tail %llx\n", 
+                    PC_in, addr_in, rt_ent->cur_tail);
+        bool update_ret = rt_ent->updateSample(addr_in);
+        ret = ret && update_ret;
+    }
 
     return ret;
 }
@@ -218,8 +237,40 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         return;
     }
 
+    // TEMP: add all load PC to iddt and tadt
+    // Addr pc_temp = pkt->req->getPC();
+    // if ((pc_temp & 0xffffff8000000000) == 0) {
+    //     bool flag;
+    //     flag = true;
+    //     for (auto& iddt_ent : indexDataDeltaTable) {
+    //         if ((pc_temp == iddt_ent.getPC()) && iddt_ent.isValid()) {
+    //             flag = false;
+    //             break;
+    //         }
+    //     }
+    //     if (flag) {
+    //         indexDataDeltaTable.emplace_back(pc_temp, 0, iddt_diff_num);
+    //         indexDataDeltaTable.back().validate();
+    //     }
+
+    //     flag = true;
+    //     for (auto& tadt_ent : targetAddrDeltaTable) {
+    //         if ((pc_temp == tadt_ent.getPC()) && tadt_ent.isValid()) {
+    //             flag = false;
+    //             break;
+    //         }
+    //     }
+    //     if (flag) {
+    //         targetAddrDeltaTable.emplace_back(pc_temp, 0, iddt_diff_num);
+    //         targetAddrDeltaTable.back().validate();
+
+    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 0, range_level_param, range_unit_param));
+    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 2, range_level_param, range_unit_param));
+    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 3, range_level_param, range_unit_param));
+    //     }
+    // }
+
     Addr req_addr = pkt->req->getVaddr();
-    assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
     for (auto& tadt_ent: targetAddrDeltaTable) {
 
@@ -227,12 +278,19 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         
         // tadt_ent validation check
         if (target_pc != pkt->req->getPC() || !tadt_ent.isValid()) continue;
+        assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
         // repeation check
         if (tadt_ent.getLast() == req_addr) continue;
 
         // range check
         if (!rangeFilter(target_pc, req_addr)) continue;
+
+        DPRINTF(DMP, "notifyL1Req: [filter pass] PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n",
+                            pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
+                            pkt->getAddr(), 
+                            pkt->req->getPaddr(), 
+                            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0 );
 
         // check passed, fill in
         tadt_ent.fill(
@@ -288,6 +346,11 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
 
             // repeation check
             if (iddt_ent.getLast() == new_data) continue;
+
+            DPRINTF(DMP, "notifyL1Resp: [filter pass] PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
+                                pkt->req->getPC(), pkt->req->getPaddr(), 
+                                pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
+                                pkt->getSize(), resp_data);
 
             iddt_ent.fill(new_data, pkt->req->hasContextId() ? pkt->req->contextId() : 0);
         }
