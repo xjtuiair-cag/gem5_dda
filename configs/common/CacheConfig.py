@@ -331,17 +331,28 @@ def config_three_level_cache(options, system):
                 clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
             )
 
-            if getattr(options, "l2_hwp_type") == "StridePrefetcher":
+            if options.l2_hwp_type == "StridePrefetcher":
                 system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
-            if getattr(options, "l2_hwp_type") == "IrregularStreamBufferPrefetcher":
+            if options.l2_hwp_type == "IrregularStreamBufferPrefetcher":
                 system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
-            if getattr(options, "l2_hwp_type") == "DiffMatchingPrefetcher":
+            if options.l2_hwp_type == "DiffMatchingPrefetcher":
                 system.cpu[i].l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].l2)
+                system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
                 system.cpu[i].l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.cpu[i].l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
-                system.cpu[i].l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+                if options.dmp_init_bench:
+                    system.cpu[i].l2.prefetcher.index_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][0]
+                    system.cpu[i].l2.prefetcher.target_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][1]
+                    system.cpu[i].l2.prefetcher.range_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][2]
+                
+
 
             # enable VA for all prefetcher
             if options.l2_hwp_type:

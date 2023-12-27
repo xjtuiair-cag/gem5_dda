@@ -714,6 +714,10 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         4, "Number of total range quantification levels"
     )
 
+    index_pc_init = VectorParam.Addr([], "IDDT array init from config")
+    target_pc_init = VectorParam.Addr([], "TADT array init from config")
+    range_pc_init = VectorParam.Addr([], "RangeTable init from config")
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._l1_simObj = NULL # Demand init by config

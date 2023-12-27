@@ -369,6 +369,13 @@ def addCommonOptions(parser):
         help="Size of indirect prefetch range, limited by Cache blkSize",
     )
     parser.add_argument(
+        "--dmp-init-bench",
+        default=None,
+        choices=ObjectList.dmp_bench_list.keys(),
+        type=str,
+        help="Bench name in order to init DMP indirect pattern"
+    )
+    parser.add_argument(
         "--l3-hwp-type",
         default=None,
         choices=ObjectList.hwp_list.get_names(),

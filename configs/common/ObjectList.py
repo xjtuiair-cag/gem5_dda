@@ -209,3 +209,19 @@ def _subclass_tester(name):
 
 is_kvm_cpu = _subclass_tester("BaseKvmCPU")
 is_noncaching_cpu = _subclass_tester("NonCachingSimpleCPU")
+
+# DMP benchmark init list
+dmp_bench_list = {
+    "spmv" : 0,
+    "bfs" : 1,
+    "sssp" : 2,
+    "bc" : 3,
+    "cc" : 4,
+    "symgs" : 5,
+    "pagerank" : 6
+}
+
+dmp_bench_init_pc = [
+    [[0x400598, 0x4005b0], [0x4005b0, 0x4005bc], [0x4005b0]],
+    [[0x400c70, 0x400c7c, 0x400ca0], [0x400c7c, 0x400ca0, 0x400ca4], [0x400ca0]]
+]
