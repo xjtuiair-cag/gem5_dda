@@ -376,6 +376,13 @@ def addCommonOptions(parser):
         help="Bench name in order to init DMP indirect pattern"
     )
     parser.add_argument(
+        "--tlb-size",
+        default=64,
+        action="store",
+        type=int,
+        help="Size of first stage ArmTLB"
+    )
+    parser.add_argument(
         "--l3-hwp-type",
         default=None,
         choices=ObjectList.hwp_list.get_names(),

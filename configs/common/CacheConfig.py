@@ -228,6 +228,10 @@ def config_cache(options, system):
                     ExternalCache("cpu%d.dcache" % i),
                 )
 
+        if options.tlb_size:
+            system.cpu[i].mmu.dtb.size = getattr(options, "tld_size", 64)
+            system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tld_size", 64) // 2
+
         system.cpu[i].createInterruptController()
         if options.l2cache:
             assert(i==0) # only support single core 
