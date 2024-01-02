@@ -470,6 +470,9 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
             addToQueue(pfqMissingTranslation, dpp);
             statsDMP.dmp_pfIdentified++;
         }
+
+        // try to do translation immediately
+        processMissingTranslations(queueSize - pfq.size());
     }
 }
 
