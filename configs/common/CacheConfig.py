@@ -229,8 +229,8 @@ def config_cache(options, system):
                 )
 
         if options.tlb_size:
-            system.cpu[i].mmu.dtb.size = getattr(options, "tld_size", 64)
-            system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tld_size", 64) // 2
+            system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
+            system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
 
         system.cpu[i].createInterruptController()
         if options.l2cache:
@@ -357,6 +357,10 @@ def config_three_level_cache(options, system):
                 icache, dcache, iwalkcache, dwalkcache
             )
             
+        if options.tlb_size:
+            system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
+            system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
+
         system.cpu[i].createInterruptController()
 
         if options.l2cache and options.l3cache:
