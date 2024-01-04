@@ -232,6 +232,9 @@ def config_cache(options, system):
             system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
             system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
 
+        # no need to edit for default False. Used to config here.
+        # system.cpu[i].mmu.dtb.pf_translation_timing = False
+
         system.cpu[i].createInterruptController()
         if options.l2cache:
             assert(i==0) # only support single core 
@@ -360,6 +363,9 @@ def config_three_level_cache(options, system):
         if options.tlb_size:
             system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
             system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
+
+        # no need to edit for default False. Used to config here.
+        # system.cpu[i].mmu.dtb.pf_translation_timing = False
 
         system.cpu[i].createInterruptController()
 
