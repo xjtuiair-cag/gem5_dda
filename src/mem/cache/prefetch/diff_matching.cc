@@ -62,8 +62,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
 
 DiffMatching::~DiffMatching()
 {
-    for (auto rt_ent : rangeTable) {
-        delete rt_ent;
+    for (auto range_ent : rangeTable) {
+        delete range_ent;
     }
 }
 
@@ -117,11 +117,19 @@ DiffMatching::findRTE(Addr index_pc, Addr target_pc, ContextID cID)
 {
     for (const auto& rte : relationTable)
     {
-        if ( rte.index_pc == index_pc && 
-             rte.target_pc == target_pc && 
+        // only allow one index for each target
+        if ( rte.target_pc == target_pc && 
              rte.cID == cID) {
             return true; 
         }
+
+        // avoid ring
+        if ( rte.index_pc == target_pc && 
+             rte.target_pc == index_pc && 
+             rte.cID == cID) {
+            return true; 
+        }
+
     }
     return false;
 }
@@ -132,6 +140,14 @@ DiffMatching::insertRTE(
     const DiffMatching::tadt_ent_t& tadt_ent_match,
     int iddt_match_point, unsigned int shift, ContextID cID)
 {
+    Addr new_index_pc = iddt_ent_match.getPC();
+    Addr new_target_pc = tadt_ent_match.getPC();
+
+    // check if pattern already exist
+    if (findRTE(new_index_pc, new_target_pc, cID)) {
+        return nullptr;
+    }
+
     // calculate the target base address
     IndexData data_match = iddt_ent_match.getLast();
     for (int i = iddt_match_point; i < iddt_diff_num; i++) {
@@ -148,16 +164,17 @@ DiffMatching::insertRTE(
     assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
 
-    Addr new_index_pc = iddt_ent_match.getPC();
-    Addr new_target_pc = tadt_ent_match.getPC();
+    // get indexPC Range type, only matter when current indexPC as other pattern's target
+    bool new_range_type = false;
+    for (auto range_ent : rangeTable) {
+        if (range_ent->target_PC != new_index_pc || range_ent->cID != cID) continue;
 
-    if (findRTE(new_index_pc, new_target_pc, cID)) {
-        return nullptr;
-    }
+        new_range_type = new_range_type || range_ent->getRangeType();
+    } 
 
     DPRINTF(DMP, "Insert RelationTable: "
-        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d\n",
-        new_index_pc, new_target_pc, target_base_addr, shift, cID
+        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d \n",
+        new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type
     );
 
     RTEntry new_rte (
@@ -165,7 +182,7 @@ DiffMatching::insertRTE(
         new_target_pc,
         target_base_addr,
         shift,
-        true, // TODO: dynamic detection
+        new_range_type, 
         16, // TODO: dynamic detection
         cID
     );
@@ -212,16 +229,26 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
 }
 
 bool
-DiffMatching::rangeFilter(Addr PC_in, Addr addr_in)
+DiffMatching::RangeTableEntry::getRangeType() const
+{
+    int sum = 0;
+    for(int sample : sample_count) {
+        sum += sample;
+    }
+    return (sum > 0);
+}
+
+bool
+DiffMatching::rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in)
 {
     bool ret = true;
 
-    for (auto rt_ent : rangeTable) {
-        if (rt_ent->target_PC != PC_in) continue;
+    for (auto range_ent : rangeTable) {
+        if (range_ent->target_PC != PC_in || range_ent->cID != cID_in) continue;
 
         DPRINTF(DMP, "updateSample: PC %llx addr %llx cur_tail %llx\n", 
-                    PC_in, addr_in, rt_ent->cur_tail);
-        bool update_ret = rt_ent->updateSample(addr_in);
+                    PC_in, addr_in, range_ent->cur_tail);
+        bool update_ret = range_ent->updateSample(addr_in);
         ret = ret && update_ret;
     }
 
@@ -251,10 +278,13 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         if (tadt_ent.getLast() == req_addr) continue;
 
         // range check
-        if (!rangeFilter(target_pc, req_addr)) continue;
+        if (!rangeFilter(target_pc, req_addr, 
+                        pkt->req->hasContextId() ? pkt->req->contextId() : 0))
+            continue;
 
-        DPRINTF(DMP, "notifyL1Req: [filter pass] PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n",
+        DPRINTF(DMP, "notifyL1Req: [filter pass] PC %llx, cID %d, Addr %llx, PAddr %llx, VAddr %llx\n",
                             pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
+                            pkt->req->hasContextId() ? pkt->req->contextId() : 0,
                             pkt->getAddr(), 
                             pkt->req->getPaddr(), 
                             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0 );

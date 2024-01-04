@@ -127,6 +127,7 @@ class DiffMatching : public Stride
         Addr target_PC; // range base on req address
         Addr cur_tail;
         int cur_count;
+        ContextID cID;
 
         const int shift_times; // 0 (byte) / 2 (int) / 3 (double)
         const int range_quant_unit; // quantify true range to several units
@@ -139,13 +140,15 @@ class DiffMatching : public Stride
       public:
         RangeTableEntry(
                 Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), 
+            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), cID(0),
                 shift_times(shift_times), range_quant_unit(rqu), range_quant_level(rql), 
                 sample_count(rql, 0) {}
 
         bool updateSample(Addr addr_in); 
+        
+        bool getRangeType() const;
 
-        int getPredLevel() {
+        int getPredLevel() const {
             return std::distance( sample_count.begin(),
                 std::max_element(sample_count.begin(), sample_count.end()));
         }
@@ -163,7 +166,7 @@ class DiffMatching : public Stride
     const int range_unit_param; // quantify true range to several units
     const int range_level_param; // total levels of range quant unit 
 
-    bool rangeFilter(Addr PC_in, Addr addr_in);
+    bool rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in);
 
 
     /** IndirectCandidateScoreboard related*/
