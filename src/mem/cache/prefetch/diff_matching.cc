@@ -183,7 +183,7 @@ DiffMatching::insertRTE(
         target_base_addr,
         shift,
         new_range_type, 
-        16, // TODO: dynamic detection
+        indir_range, // TODO: dynamic detection
         cID
     );
 
