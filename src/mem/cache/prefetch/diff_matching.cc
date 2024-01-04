@@ -237,39 +237,6 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         return;
     }
 
-    // TEMP: add all load PC to iddt and tadt
-    // Addr pc_temp = pkt->req->getPC();
-    // if ((pc_temp & 0xffffff8000000000) == 0) {
-    //     bool flag;
-    //     flag = true;
-    //     for (auto& iddt_ent : indexDataDeltaTable) {
-    //         if ((pc_temp == iddt_ent.getPC()) && iddt_ent.isValid()) {
-    //             flag = false;
-    //             break;
-    //         }
-    //     }
-    //     if (flag) {
-    //         indexDataDeltaTable.emplace_back(pc_temp, 0, iddt_diff_num);
-    //         indexDataDeltaTable.back().validate();
-    //     }
-
-    //     flag = true;
-    //     for (auto& tadt_ent : targetAddrDeltaTable) {
-    //         if ((pc_temp == tadt_ent.getPC()) && tadt_ent.isValid()) {
-    //             flag = false;
-    //             break;
-    //         }
-    //     }
-    //     if (flag) {
-    //         targetAddrDeltaTable.emplace_back(pc_temp, 0, iddt_diff_num);
-    //         targetAddrDeltaTable.back().validate();
-
-    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 0, range_level_param, range_unit_param));
-    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 2, range_level_param, range_unit_param));
-    //         rangeTable.push_back(new RangeTableEntry(pc_temp, 0x0, 3, range_level_param, range_unit_param));
-    //     }
-    // }
-
     Addr req_addr = pkt->req->getVaddr();
 
     for (auto& tadt_ent: targetAddrDeltaTable) {
