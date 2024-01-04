@@ -203,6 +203,28 @@ def config_cache(options, system):
                 icache, dcache, iwalkcache, dwalkcache
             )
 
+            if options.l1d_hwp_type == "DiffMatchingPrefetcher":
+                system.cpu[i].dcache.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].dcache)
+
+                system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
+                system.cpu[i].dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+                system.cpu[i].dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+
+                if options.dmp_init_bench:
+                    system.cpu[i].dcache.prefetcher.index_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][0]
+                    system.cpu[i].dcache.prefetcher.target_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][1]
+                    system.cpu[i].dcache.prefetcher.range_pc_init = \
+                        ObjectList.dmp_bench_init_pc[ObjectList.dmp_bench_list[options.dmp_init_bench]][2]
+
+            # enable VA for all prefetcher
+            if options.l1d_hwp_type:
+                system.cpu[i].dcache.prefetcher.use_virtual_addresses = True
+                if system.cpu[i].mmu.dtb:
+                    print("Adding DTLB to DCache prefetcher.")
+                    system.cpu[i].dcache.prefetcher.registerTLB(system.cpu[i].mmu.dtb)
+
             if options.memchecker:
                 # The mem_side ports of the caches haven't been connected yet.
                 # Make sure connectAllPorts connects the right objects.

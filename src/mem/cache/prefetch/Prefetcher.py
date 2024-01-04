@@ -720,13 +720,13 @@ class DiffMatchingPrefetcher(StridePrefetcher):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._l1_simObj = NULL # Demand init by config
-        self._l2_simObj = NULL # Demand init by config
+        self._monitor_simObj = NULL # Demand init by config
+        self._trigger_simObj = NULL # Demand init by config
         # self._tlbs = []
     
-    def set_probe_obj(self, l1_simObj, l2_simObj):
-        self._l1_simObj = l1_simObj
-        self._l2_simObj = l2_simObj
+    def set_probe_obj(self, monitor_simObj, trigger_simObj):
+        self._monitor_simObj = monitor_simObj
+        self._trigger_simObj = trigger_simObj
 
     # Override BasePrefetcher::regProbeListeners
     # Register L1 request and response probelisteners
@@ -734,26 +734,27 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         for tlb in self._tlbs:
             self.getCCObject().addTLB(tlb.getCCObject())
 
-        # Self ProbeListener
+        # Add Trigger ProbeListener
         self.getCCObject().addEventProbe(
-            self._l2_simObj.getCCObject(), "Miss", False, True, False, False
+            self._trigger_simObj.getCCObject(), "Miss", False, True, False, False
         ) 
         self.getCCObject().addEventProbe(
-            self._l2_simObj.getCCObject(), "Fill", True, False, False, False
+            self._trigger_simObj.getCCObject(), "Fill", True, False, False, False
         ) 
         self.getCCObject().addEventProbe(
-            self._l2_simObj.getCCObject(), "Hit", False, False, False, False
+            self._trigger_simObj.getCCObject(), "Hit", False, False, False, False
         ) 
 
-        if self._l1_simObj:
+        # Add Monitor ProbeListener
+        if self._monitor_simObj:
             # Request to L1 ProbeListener
             self.getCCObject().addEventProbe(
-                self._l1_simObj.getCCObject(), "Request", False, False, True, False
+                self._monitor_simObj.getCCObject(), "Request", False, False, True, False
             ) 
             # Response from L1 ProbeListener
             self.getCCObject().addEventProbe(
-                self._l1_simObj.getCCObject(), "Response", False, False, False, True
+                self._monitor_simObj.getCCObject(), "Response", False, False, False, True
             )
         else:
-            print("No valid L1 SimObj !")
+            print("No valid Monitor SimObj !")
         self.getCCObject().regProbeListeners()
