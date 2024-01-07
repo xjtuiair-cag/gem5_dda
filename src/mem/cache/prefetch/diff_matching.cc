@@ -28,6 +28,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ptr(0),
     statsDMP(this)
 {
+    std::vector<Addr> pc_list_for_stats;
+
     // init IDDT
     if (!p.index_pc_init.empty()) {
         for (auto index_pc : p.index_pc_init) {
@@ -35,6 +37,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
             indexDataDeltaTable.back().validate();
             iddt_ptr++;
         }
+        pc_list_for_stats.insert(
+            pc_list_for_stats.end(), p.index_pc_init.begin(), p.index_pc_init.end()
+        );
     }
 
     // init TADT
@@ -44,6 +49,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
             targetAddrDeltaTable.back().validate();
             tadt_ptr++;
         }
+        pc_list_for_stats.insert(
+            pc_list_for_stats.end(), p.target_pc_init.begin(), p.target_pc_init.end()
+        );
     }
 
     // init RangeTable
@@ -58,6 +66,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
             }
         }
     }
+
+    prefetchStats.regStatsPerPC(pc_list_for_stats);
+    statsDMP.regStatsPerPC(pc_list_for_stats);
 }
 
 DiffMatching::~DiffMatching()
@@ -70,8 +81,38 @@ DiffMatching::~DiffMatching()
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
     : statistics::Group(parent),
     ADD_STAT(dmp_pfIdentified, statistics::units::Count::get(),
+             "number of DMP prefetch candidates identified"),
+    ADD_STAT(dmp_pfIdentified_perPC, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified")
 {
+}
+
+void
+DiffMatching::DMPStats::regStatsPerPC(const std::vector<Addr> PC_list)
+{
+    using namespace statistics;
+
+    assert(!PC_list.empty());
+    assert(PCtoStatsIndex.empty());
+
+    int PC_list_len = PC_list.size();
+
+    dmp_pfIdentified_perPC 
+        .init(PC_list_len)
+        .flags(total | nozero | nonan)
+        ;
+    
+    for (int i = 0; i < PC_list_len; i++) {
+        if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
+
+        PCtoStatsIndex.insert({PC_list[i], i});
+
+        std::stringstream stream;
+        stream << std::hex << PC_list[i];
+        std::string pc_name = stream.str();
+
+        dmp_pfIdentified_perPC.subname(i, pc_name);
+    }
 }
 
 void
@@ -466,6 +507,12 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 
             addToQueue(pfqMissingTranslation, dpp);
             statsDMP.dmp_pfIdentified++;
+            if (statsDMP.PCtoStatsIndex.find(rt_ent.target_pc) != 
+                statsDMP.PCtoStatsIndex.end()) {
+                statsDMP.dmp_pfIdentified_perPC[
+                    statsDMP.PCtoStatsIndex[rt_ent.target_pc]
+                    ]++;
+            }
         }
 
         // try to do translation immediately

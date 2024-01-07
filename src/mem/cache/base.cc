@@ -364,7 +364,9 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(pkt).mshrMisses[pkt->req->requestorId()]++;
         if (prefetcher && pkt->isDemand())
-            prefetcher->incrDemandMhsrMisses();
+            prefetcher->incrDemandMhsrMisses(
+                pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr
+                );
 
         if (pkt->isEviction() || pkt->cmd == MemCmd::WriteClean) {
             // We use forward_time here because there is an
@@ -919,21 +921,27 @@ BaseCache::getNextQueueEntry()
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in cache, "
                         "dropped.\n", pf_addr);
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
-                prefetcher->pfHitInCache();
+                prefetcher->pfHitInCache(
+                    pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr
+                    );
                 // free the request and packet
                 delete pkt;
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in a MSHR, "
                         "dropped.\n", pf_addr);
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
-                prefetcher->pfHitInMSHR();
+                prefetcher->pfHitInMSHR(
+                    pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr
+                );
                 // free the request and packet
                 delete pkt;
             } else if (writeBuffer.findMatch(pf_addr, pkt->isSecure())) {
                 DPRINTF(HWPrefetch, "Prefetch %#x has hit in the "
                         "Write Buffer, dropped.\n", pf_addr);
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
-                prefetcher->pfHitInWB();
+                prefetcher->pfHitInWB(
+                    pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr
+                );
                 // free the request and packet
                 delete pkt;
             } else {

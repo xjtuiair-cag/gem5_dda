@@ -351,29 +351,42 @@ class Base : public ClockedObject
     struct StatGroup : public statistics::Group
     {
         StatGroup(statistics::Group *parent);
+        void regStatsPerPC(const std::vector<Addr> &PC_list);
+        /** HashMap used to record statsPerPC */
+        std::unordered_map<Addr, int> PCtoStatsIndex;
+
         statistics::Scalar demandMshrMisses;
+        statistics::Vector demandMshrMissesPerPC;
         statistics::Scalar pfIssued;
+        statistics::Vector pfIssuedPerPC;
         /** The number of times a HW-prefetched block is evicted w/o
          * reference. */
         statistics::Scalar pfUnused;
         /** The number of times a HW-prefetch is useful. */
         statistics::Scalar pfUseful;
+        statistics::Vector pfUsefulPerPC;
         /** The number of times there is a hit on prefetch but cache block
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
         statistics::Formula accuracy;
-        statistics::Formula timly_accuracy;
+        statistics::Formula accuracyPerPC;
+        statistics::Formula timely_accuracy;
+        statistics::Formula timely_accuracy_perPC;
         statistics::Formula coverage;
+        statistics::Formula coveragePerPC;
 
         /** The number of times a HW-prefetch hits in cache. */
         statistics::Scalar pfHitInCache;
+        statistics::Vector pfHitInCachePerPC;
 
         /** The number of times a HW-prefetch hits in a MSHR. */
         statistics::Scalar pfHitInMSHR;
+        statistics::Vector pfHitInMSHRPerPC;
 
         /** The number of times a HW-prefetch hits
          * in the Write Buffer (WB). */
         statistics::Scalar pfHitInWB;
+        statistics::Vector pfHitInWBPerPC;
 
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */
@@ -420,27 +433,51 @@ class Base : public ClockedObject
     }
 
     void
-    incrDemandMhsrMisses()
+    incrDemandMhsrMisses(Addr cause_pc = MaxAddr)
     {
         prefetchStats.demandMshrMisses++;
+        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
+            prefetchStats.PCtoStatsIndex.end()) {
+            prefetchStats.demandMshrMissesPerPC[
+                prefetchStats.PCtoStatsIndex[cause_pc]
+                ]++;
+        }
     }
 
     void
-    pfHitInCache()
+    pfHitInCache(Addr cause_pc = MaxAddr)
     {
         prefetchStats.pfHitInCache++;
+        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
+            prefetchStats.PCtoStatsIndex.end()) {
+            prefetchStats.pfHitInCachePerPC[
+                prefetchStats.PCtoStatsIndex[cause_pc]
+                ]++;
+        }
     }
 
     void
-    pfHitInMSHR()
+    pfHitInMSHR(Addr cause_pc = MaxAddr)
     {
         prefetchStats.pfHitInMSHR++;
+        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
+            prefetchStats.PCtoStatsIndex.end()) {
+            prefetchStats.pfHitInMSHRPerPC[
+                prefetchStats.PCtoStatsIndex[cause_pc]
+                ]++;
+        }
     }
 
     void
-    pfHitInWB()
+    pfHitInWB(Addr cause_pc = MaxAddr)
     {
         prefetchStats.pfHitInWB++;
+        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
+            prefetchStats.PCtoStatsIndex.end()) {
+            prefetchStats.pfHitInWBPerPC[
+                prefetchStats.PCtoStatsIndex[cause_pc]
+                ]++;
+        }
     }
 
     /**

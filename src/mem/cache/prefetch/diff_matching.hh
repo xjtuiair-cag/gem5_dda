@@ -229,8 +229,12 @@ class DiffMatching : public Stride
     struct DMPStats : public statistics::Group
     {
         DMPStats(statistics::Group *parent);
+        void regStatsPerPC(const std::vector<Addr> PC_list);
+        /** HashMap used to record statsPerPC */
+        std::unordered_map<Addr, int> PCtoStatsIndex;
         // STATS
         statistics::Scalar dmp_pfIdentified;
+        statistics::Vector dmp_pfIdentified_perPC;
     } statsDMP;
 
 

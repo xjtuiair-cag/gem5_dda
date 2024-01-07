@@ -256,6 +256,15 @@ Queued::getPacket()
 
     prefetchStats.pfIssued++;
     issuedPrefetches += 1;
+
+    Addr pkt_pc = pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr;
+    if (prefetchStats.PCtoStatsIndex.find(pkt_pc) != 
+        prefetchStats.PCtoStatsIndex.end()) {
+        prefetchStats.pfIssuedPerPC[
+            prefetchStats.PCtoStatsIndex[pkt_pc]
+            ]++;
+    }
+
     assert(pkt != nullptr);
     DPRINTF(HWPrefetch, "Generating prefetch for %#x.\n", pkt->getAddr());
 
