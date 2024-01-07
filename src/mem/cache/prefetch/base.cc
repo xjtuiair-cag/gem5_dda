@@ -144,6 +144,8 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
         "state"),
     ADD_STAT(accuracy, statistics::units::Count::get(),
         "accuracy of the prefetcher"),
+    ADD_STAT(timly_accuracy, statistics::units::Count::get(),
+        "timly accuracy of the prefetcher"),
     ADD_STAT(coverage, statistics::units::Count::get(),
     "coverage brought by this prefetcher"),
     ADD_STAT(pfHitInCache, statistics::units::Count::get(),
@@ -160,12 +162,13 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     pfUnused.flags(nozero);
 
     accuracy.flags(total);
-    accuracy = pfUseful / pfIssued;
+    timly_accuracy = pfUseful / pfIssued;
 
     coverage.flags(total);
     coverage = pfUseful / (pfUseful + demandMshrMisses);
 
     pfLate = pfHitInCache + pfHitInMSHR + pfHitInWB;
+    accuracy = pfUseful / (pfIssued - pfLate);
 }
 
 bool

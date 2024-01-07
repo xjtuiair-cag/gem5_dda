@@ -362,6 +362,7 @@ class Base : public ClockedObject
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
         statistics::Formula accuracy;
+        statistics::Formula timly_accuracy;
         statistics::Formula coverage;
 
         /** The number of times a HW-prefetch hits in cache. */
