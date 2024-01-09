@@ -354,6 +354,7 @@ class Base : public ClockedObject
         void regStatsPerPC(const std::vector<Addr> &PC_list);
         /** HashMap used to record statsPerPC */
         std::unordered_map<Addr, int> PCtoStatsIndex;
+        int max_per_pc;
 
         statistics::Scalar demandMshrMisses;
         statistics::Vector demandMshrMissesPerPC;

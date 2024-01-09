@@ -131,6 +131,7 @@ Base::setCache(BaseCache *_cache)
 
 Base::StatGroup::StatGroup(statistics::Group *parent)
   : statistics::Group(parent),
+    max_per_pc(64),
     ADD_STAT(demandMshrMisses, statistics::units::Count::get(),
         "demands not covered by prefetchs"),
     ADD_STAT(demandMshrMissesPerPC, statistics::units::Count::get(),
@@ -189,40 +190,29 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
 
     accuracy.flags(total | nonan);
     accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
-}
-
-void 
-Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
-{
-    using namespace statistics;
-
-    assert(!PC_list.empty());
-    assert(PCtoStatsIndex.empty());
-
-    int PC_list_len = PC_list.size();
 
     demandMshrMissesPerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfIssuedPerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfUsefulPerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfHitInCachePerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfHitInMSHRPerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfHitInWBPerPC
-        .init(PC_list_len)
+        .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     accuracyPerPC.flags(nozero | nonan);
@@ -234,6 +224,19 @@ Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
 
     coveragePerPC.flags(nozero | nonan);
     coveragePerPC = pfUsefulPerPC / (pfUsefulPerPC + demandMshrMissesPerPC);
+}
+
+void 
+Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
+{
+    using namespace statistics;
+
+    assert(!PC_list.empty());
+    assert(PCtoStatsIndex.empty());
+
+    int PC_list_len = PC_list.size();
+    assert(PC_list_len < max_per_pc);
+
     
     for (int i = 0; i < PC_list_len; i++) {
         if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
