@@ -57,6 +57,8 @@ class ArmTLB(BaseTLB):
         "timing  or functional for prefetch translation."
     )
 
+    can_serialize = Param.Bool(False, "Can this TLB be serialized?")
+
     partial_levels = VectorParam.ArmLookupLevel(
         [],
         "List of intermediate lookup levels allowed to be cached in the TLB "

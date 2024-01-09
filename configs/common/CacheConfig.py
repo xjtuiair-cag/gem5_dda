@@ -254,6 +254,8 @@ def config_cache(options, system):
             system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
             system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
 
+        system.cpu[i].mmu.dtb.can_serialize = True
+
         # no need to edit for default False. Used to config here.
         # system.cpu[i].mmu.dtb.pf_translation_timing = False
 
@@ -385,6 +387,8 @@ def config_three_level_cache(options, system):
         if options.tlb_size:
             system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
             system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
+
+        system.cpu[i].mmu.dtb.can_serialize = True
 
         # no need to edit for default False. Used to config here.
         # system.cpu[i].mmu.dtb.pf_translation_timing = False

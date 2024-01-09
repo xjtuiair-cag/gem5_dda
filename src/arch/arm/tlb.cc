@@ -64,7 +64,8 @@ TLB::TLB(const ArmTLBParams &p)
       pf_translation_timing(p.pf_translation_timing),
       _walkCache(false),
       tableWalker(nullptr),
-      stats(*this), rangeMRU(1), vmid(0)
+      stats(*this), rangeMRU(1), vmid(0),
+      can_serialize(p.can_serialize)
 {
     for (int lvl = LookupLevel::L0;
          lvl < LookupLevel::Num_ArmLookupLevel; lvl++) {
@@ -406,6 +407,38 @@ Port *
 TLB::getTableWalkerPort()
 {
     return &tableWalker->getTableWalkerPort();
+}
+
+void
+TLB::serialize(CheckpointOut &cp) const
+{
+    if (!can_serialize) return;
+
+    int _size = size;
+    SERIALIZE_SCALAR(_size);
+
+    // Store all entries
+    for (int i = 0; i < size; i++) {
+        table[i].serializeSection(cp, csprintf("Entry%d", i));
+    }
+}
+
+void
+TLB::unserialize(CheckpointIn &cp)
+{
+    if (!can_serialize) return;
+
+    int _size;
+    UNSERIALIZE_SCALAR(_size);
+    if (_size > size) {
+        fatal("TLB size less than the one in checkpoint!");
+    } 
+
+    // Restore all entries
+    for (int i = 0; i < _size; i++) {
+        // Use pre-allocated space in table
+        table[i].unserializeSection(cp, csprintf("Entry%d", i));
+    }
 }
 
 } // namespace gem5

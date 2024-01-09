@@ -51,6 +51,7 @@
 #include "mem/request.hh"
 #include "params/ArmTLB.hh"
 #include "sim/probe/pmu.hh"
+#include "sim/sim_object.hh"
 
 namespace gem5
 {
@@ -159,6 +160,8 @@ class TLB : public BaseTLB
     int rangeMRU; //On lookup, only move entries ahead when outside rangeMRU
     vmid_t vmid;
 
+    bool can_serialize;
+
   public:
     using Params = ArmTLBParams;
     using Lookup = TlbEntry::Lookup;
@@ -166,6 +169,10 @@ class TLB : public BaseTLB
 
     TLB(const Params &p);
     TLB(const Params &p, int _size, TableWalker *_walker);
+
+    // Checkpointing
+    void serialize(CheckpointOut &cp) const override;
+    void unserialize(CheckpointIn &cp) override;
 
     /** Lookup an entry in the TLB
      * @return pointer to TLB entry if it exists
