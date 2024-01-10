@@ -383,6 +383,12 @@ def addCommonOptions(parser):
         help="Size of first stage ArmTLB"
     )
     parser.add_argument(
+        "--sample-stats",
+        action="store",
+        type=str,
+        help="<M,N> take stats at tick M and every N ticks thereafter",
+    )
+    parser.add_argument(
         "--l3-hwp-type",
         default=None,
         choices=ObjectList.hwp_list.get_names(),

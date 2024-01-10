@@ -274,6 +274,33 @@ def scriptCheckpoints(options, maxtick, cptdir):
 
     return exit_event
 
+def scriptStats(options, maxtick):
+    when, period = options.sample_stats.split(",", 1)
+    when = int(when)
+    period = int(period)
+
+    exit_event = m5.simulate(when - m5.curTick())
+    exit_cause = exit_event.getCause()
+
+    sim_ticks = when
+    m5.stats.reset()
+    
+    while exit_cause == "simulate() limit reached":
+        if (sim_ticks + period) > maxtick:
+            exit_event = m5.simulate(maxtick - sim_ticks)
+            exit_cause = exit_event.getCause()
+            m5.stats.dump()
+            break
+        else:
+            exit_event = m5.simulate(period)
+            exit_cause = exit_event.getCause()
+            sim_ticks += period
+        m5.stats.dump()
+        m5.stats.reset()
+
+    return exit_event
+    
+
 
 def benchCheckpoints(options, maxtick, cptdir):
     exit_event = m5.simulate(maxtick - m5.curTick())
@@ -805,6 +832,9 @@ def run(options, root, testsys, cpu_class, multiprocesses=0):
             exit_event = repeatSwitch(
                 testsys, repeat_switch_cpu_list, maxtick, options.repeat_switch
             )
+        elif options.sample_stats != None:
+            # Don't take checkpoint when sampling stats
+            exit_event = scriptStats(options, maxtick)
         else:
             exit_event = benchCheckpoints(options, maxtick, cptdir)
 
