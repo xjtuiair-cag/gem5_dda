@@ -18,13 +18,18 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     iddt_ent_num(p.iddt_ent_num),
     tadt_ent_num(p.tadt_ent_num),
     rt_ent_num(p.rt_ent_num),
+    rg_ent_num(p.rg_ent_num),
     indir_range(p.indir_range),
     iddt_diff_num(p.iddt_diff_num),
     tadt_diff_num(p.tadt_diff_num),
-    iddt_ptr(0),
-    tadt_ptr(0),
+    indexDataDeltaTable(p.iddt_ent_num, iddt_ent_t(p.iddt_diff_num, false)),
+    targetAddrDeltaTable(p.tadt_ent_num, tadt_ent_t(p.tadt_diff_num, false)),
+    iddt_ptr(0), tadt_ptr(0),
     range_unit_param(p.range_unit),
     range_level_param(p.range_level),
+    rangeTable(p.rg_ent_num * 4, RangeTableEntry(p.range_unit, p.range_level, false)),
+    rg_ptr(0),
+    relationTable(p.rt_ent_num),
     rt_ptr(0),
     statsDMP(this)
 {
@@ -33,8 +38,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     // init IDDT
     if (!p.index_pc_init.empty()) {
         for (auto index_pc : p.index_pc_init) {
-            indexDataDeltaTable.emplace_back(index_pc, 0, iddt_diff_num);
-            indexDataDeltaTable.back().validate();
+            indexDataDeltaTable[iddt_ptr].update(index_pc, 0, 0);
+            indexDataDeltaTable[iddt_ptr].validate();
             iddt_ptr++;
         }
         pc_list_for_stats.insert(
@@ -45,8 +50,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     // init TADT
     if (!p.target_pc_init.empty()) {
         for (auto target_pc : p.target_pc_init) {
-            targetAddrDeltaTable.emplace_back(target_pc, 0, tadt_diff_num);
-            targetAddrDeltaTable.back().validate();
+            targetAddrDeltaTable[tadt_ptr].update(target_pc, 0, 0);
+            targetAddrDeltaTable[tadt_ptr].validate();
             tadt_ptr++;
         }
         pc_list_for_stats.insert(
@@ -58,11 +63,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     if (!p.range_pc_init.empty()) {
         for (auto range_pc : p.range_pc_init) {
             for (unsigned int shift_try: shift_v) {
-                rangeTable.push_back(
-                    new RangeTableEntry(
-                        range_pc, 0x0, shift_try, range_level_param, range_unit_param
-                    )
-                );
+                rangeTable[rg_ptr].update(range_pc, 0x0, shift_try, 0);
+                rangeTable[rg_ptr].validate();
+                rg_ptr++;
             }
         }
     }
@@ -73,9 +76,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
 
 DiffMatching::~DiffMatching()
 {
-    for (auto range_ent : rangeTable) {
-        delete range_ent;
-    }
+    // for (auto range_ent : rangeTable) {
+    //     delete range_ent;
+    // }
 }
 
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
@@ -158,6 +161,8 @@ DiffMatching::findRTE(Addr index_pc, Addr target_pc, ContextID cID)
 {
     for (const auto& rte : relationTable)
     {
+        if (!rte.valid) continue;
+
         // only allow one index for each target
         if ( rte.target_pc == target_pc && 
              rte.cID == cID) {
@@ -207,10 +212,10 @@ DiffMatching::insertRTE(
 
     // get indexPC Range type, only matter when current indexPC as other pattern's target
     bool new_range_type = false;
-    for (auto range_ent : rangeTable) {
-        if (range_ent->target_PC != new_index_pc || range_ent->cID != cID) continue;
+    for (const auto& range_ent : rangeTable) {
+        if (range_ent.target_PC != new_index_pc || range_ent.cID != cID) continue;
 
-        new_range_type = new_range_type || range_ent->getRangeType();
+        new_range_type = new_range_type || range_ent.getRangeType();
     } 
 
     DPRINTF(DMP, "Insert RelationTable: "
@@ -218,24 +223,19 @@ DiffMatching::insertRTE(
         new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type
     );
 
-    RTEntry new_rte (
+    RTEntry* new_rte = relationTable[rt_ptr].update(
         new_index_pc,
         new_target_pc,
         target_base_addr,
         shift,
         new_range_type, 
         indir_range, // TODO: dynamic detection
-        cID
+        cID,
+        true
     );
+    rt_ptr = (rt_ptr+1) % rt_ent_num;
 
-    if (relationTable.size() < rt_ent_num) {
-        relationTable.push_back(new_rte);
-        return &relationTable.back();
-    } else {
-        RTEntry* brand_new_ent = relationTable[rt_ptr].update(new_rte);
-        rt_ptr = (rt_ptr+1) % rt_ent_num;
-        return brand_new_ent;
-    }
+    return new_rte;
 }
 
 bool
@@ -284,12 +284,12 @@ DiffMatching::rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in)
 {
     bool ret = true;
 
-    for (auto range_ent : rangeTable) {
-        if (range_ent->target_PC != PC_in || range_ent->cID != cID_in) continue;
+    for (auto& range_ent : rangeTable) {
+        if (range_ent.target_PC != PC_in || range_ent.cID != cID_in) continue;
 
         DPRINTF(DMP, "updateSample: PC %llx addr %llx cur_tail %llx\n", 
-                    PC_in, addr_in, range_ent->cur_tail);
-        bool update_ret = range_ent->updateSample(addr_in);
+                    PC_in, addr_in, range_ent.cur_tail);
+        bool update_ret = range_ent.updateSample(addr_in);
         ret = ret && update_ret;
     }
 
@@ -438,6 +438,8 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 
     Addr pc = pkt->req->getPC();
     for (const auto& rt_ent: relationTable) { 
+
+        if (!rt_ent.valid) continue;
 
         if (rt_ent.index_pc != pc) continue;
 

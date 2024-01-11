@@ -31,6 +31,7 @@ class DiffMatching : public Stride
     const int iddt_ent_num;
     const int tadt_ent_num;
     const int rt_ent_num;
+    const int rg_ent_num;
 
     // indirect range prefetch length
     int indir_range;
@@ -56,9 +57,22 @@ class DiffMatching : public Stride
         std::vector<T> diff;
 
       public:
+
+        // normal constructor
         DiffSeqCollection(Addr pc, T last, int diff_size)
           : pc(pc), valid(false), ready(false), cID(0), 
-            last(last), diff_ptr(0), diff_size(diff_size) {};
+            last(last), diff_ptr(0), diff_size(diff_size) 
+        {
+            diff.reserve(diff_size);
+        };
+
+        // init constructor
+        DiffSeqCollection(int diff_size, bool valid = false)
+         : valid(valid), diff_size(diff_size)
+        {
+           diff.reserve(diff_size);
+        };
+
         ~DiffSeqCollection() = default;
 
         void validate() { valid = true; };
@@ -97,7 +111,7 @@ class DiffMatching : public Stride
 
         T operator[](int index) const { return diff[ (diff_ptr+index) % diff_size ]; };
 
-        void renew (Addr pc_new, T last_new, ContextID cID_new)
+        void update(Addr pc_new, T last_new, ContextID cID_new)
         {
             pc = pc_new;
             last = last_new;
@@ -122,40 +136,6 @@ class DiffMatching : public Stride
     tadt_ent_t* allocateTADTEntry(Addr target_pc);
 
     /** RangeTable related */
-    struct RangeTableEntry
-    {
-        Addr target_PC; // range base on req address
-        Addr cur_tail;
-        int cur_count;
-        ContextID cID;
-
-        const int shift_times; // 0 (byte) / 2 (int) / 3 (double)
-        const int range_quant_unit; // quantify true range to several units
-        const int range_quant_level; // total levels of range quant unit 
-
-        // NOTE: Range prefetch distence should coorparate wit StreamPrefetch
-        // NOTE: [TODO] more suitable RangePrefetc schedule policy
-        std::vector<int> sample_count;
-
-      public:
-        RangeTableEntry(
-                Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), cID(0),
-                shift_times(shift_times), range_quant_unit(rqu), range_quant_level(rql), 
-                sample_count(rql, 0) {}
-
-        bool updateSample(Addr addr_in); 
-        
-        bool getRangeType() const;
-
-        int getPredLevel() const {
-            return std::distance( sample_count.begin(),
-                std::max_element(sample_count.begin(), sample_count.end()));
-        }
-
-    };
-
-    std::vector<RangeTableEntry *> rangeTable;
 
     /** Range quantification method
     * eg. unit=8, level=4
@@ -165,6 +145,75 @@ class DiffMatching : public Stride
     */
     const int range_unit_param; // quantify true range to several units
     const int range_level_param; // total levels of range quant unit 
+
+    struct RangeTableEntry
+    {
+        Addr target_PC; // range base on req address
+        Addr cur_tail;
+        int cur_count;
+        ContextID cID;
+        bool valid;
+
+        int shift_times; // 0 (byte) / 2 (int) / 3 (double)
+        
+        const int range_quant_unit; // quantify true range to several units
+        const int range_quant_level; // total levels of range quant unit 
+
+        // NOTE: Range prefetch distence should coorparate wit StreamPrefetch
+        // NOTE: [TODO] more suitable RangePrefetc schedule policy
+        std::vector<int> sample_count;
+
+        // normal constructor
+        RangeTableEntry(
+                Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
+            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), 
+                cID(0), valid(false), shift_times(shift_times), 
+                range_quant_unit(rqu), range_quant_level(rql), 
+                sample_count(rql) {}
+
+        // init constructor
+        RangeTableEntry(int rqu, int rql, bool valid = false)
+          : valid(valid), range_quant_unit(rqu), range_quant_level(rql), 
+            sample_count(rql) {};
+
+        ~RangeTableEntry() = default;
+
+        bool updateSample(Addr addr_in); 
+
+        void validate() { valid = true; };
+
+        void invalidate() { 
+            valid = false; 
+            std::fill(sample_count.begin(), sample_count.end(), 0); 
+        };
+        
+        bool getRangeType() const;
+
+        int getPredLevel() const {
+            return std::distance( sample_count.begin(),
+                std::max_element(sample_count.begin(), sample_count.end()));
+        }
+
+        void update(
+            Addr target_PC_in,
+            Addr req_addr_in,
+            int shift_times_in,
+            ContextID cID_in
+        ) {
+            target_PC = target_PC_in;
+            cur_tail =  req_addr_in;
+            cur_count = 0;
+            cID = cID_in;
+            valid = false;
+            shift_times = shift_times_in;
+            std::fill(sample_count.begin(), sample_count.end(), 0); 
+        }
+    };
+
+
+    std::vector<RangeTableEntry> rangeTable;
+
+    int rg_ptr;
 
     bool rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in);
 
@@ -188,33 +237,44 @@ class DiffMatching : public Stride
         bool range;
         int range_degree;
         ContextID cID;
-        Tick birth_time;
+        bool valid;
 
-        // manually allocate
+        // normal constructor
         RTEntry(
             Addr index_pc, Addr target_pc, Addr target_base_addr, 
             unsigned int shift, bool range, int range_degree, ContextID cID
         ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
-            shift(shift), range(range), range_degree(range_degree), cID(cID)
-        { birth_time = curTick(); }
+            shift(shift), range(range), range_degree(range_degree), cID(cID), valid(false) {}
 
-        RTEntry* update(const RTEntry& new_entry)
-        {
-            index_pc = new_entry.index_pc;
-            target_pc = new_entry.target_pc;
-            target_base_addr = new_entry.target_base_addr;
-            shift = new_entry.shift;
-            range = new_entry.range;
-            range_degree = new_entry.range_degree;
-            cID = new_entry.cID;
-            birth_time = new_entry.birth_time;
+        // default constructor
+        RTEntry(bool valid = false) : valid(valid) {};
+
+        // update for new relation
+        RTEntry* update(
+            Addr index_pc_in,
+            Addr target_pc_in,
+            Addr target_base_addr_in,
+            unsigned int shift_in,
+            bool range_in,
+            int range_degree_in,
+            ContextID cID_in,
+            bool valid_in
+        ) {
+            index_pc = index_pc_in;
+            target_pc = target_pc_in;
+            target_base_addr = target_base_addr_in;
+            shift = shift_in;
+            range = range_in;
+            range_degree = range_degree_in;
+            cID = cID_in;
+            valid = valid_in;
             
             return this;
-        }
+        };
     };
     std::vector<RTEntry> relationTable;
 
-    // point to the next available RTE (index in RT)
+    // point to the next update position
     int rt_ptr; 
 
     bool findRTE(Addr index_pc, Addr target_pc, ContextID cID);
