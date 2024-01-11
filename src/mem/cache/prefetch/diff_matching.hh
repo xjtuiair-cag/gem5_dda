@@ -12,6 +12,7 @@
 #include "base/types.hh"
 #include "mem/cache/prefetch/stride.hh"
 #include "mem/cache/prefetch/queued.hh"
+#include "sim/eventq.hh"
 
 namespace gem5
 {
@@ -30,8 +31,10 @@ class DiffMatching : public Stride
 
     const int iddt_ent_num;
     const int tadt_ent_num;
-    const int rt_ent_num;
+    const int iq_ent_num;
     const int rg_ent_num;
+    const int ics_ent_num;
+    const int rt_ent_num;
 
     // indirect range prefetch length
     int indir_range;
@@ -111,7 +114,7 @@ class DiffMatching : public Stride
 
         T operator[](int index) const { return diff[ (diff_ptr+index) % diff_size ]; };
 
-        void update(Addr pc_new, T last_new, ContextID cID_new)
+        DiffSeqCollection& update(Addr pc_new, ContextID cID_new, T last_new = 0)
         {
             pc = pc_new;
             last = last_new;
@@ -120,6 +123,7 @@ class DiffMatching : public Stride
             valid = false;
             diff_ptr = 0;
             diff.clear();
+            return *this;
         };
     };
 
@@ -132,8 +136,8 @@ class DiffMatching : public Stride
     int iddt_ptr;
     int tadt_ptr;
 
-    iddt_ent_t* allocateIDDTEntry(Addr index_pc);
-    tadt_ent_t* allocateTADTEntry(Addr target_pc);
+    iddt_ent_t* insertIDDT(Addr index_pc_in, ContextID cID_in);
+    tadt_ent_t* insertTADT(Addr target_pc_in, ContextID cID_in);
 
     /** RangeTable related */
 
@@ -148,7 +152,7 @@ class DiffMatching : public Stride
 
     struct RangeTableEntry
     {
-        Addr target_PC; // range base on req address
+        Addr target_pc; // range base on req address
         Addr cur_tail;
         int cur_count;
         ContextID cID;
@@ -165,8 +169,8 @@ class DiffMatching : public Stride
 
         // normal constructor
         RangeTableEntry(
-                Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), 
+                Addr target_pc, Addr req_addr, int shift_times, int rql, int rqu
+            ) : target_pc(target_pc), cur_tail(req_addr), cur_count(0), 
                 cID(0), valid(false), shift_times(shift_times), 
                 range_quant_unit(rqu), range_quant_level(rql), 
                 sample_count(rql) {}
@@ -194,38 +198,125 @@ class DiffMatching : public Stride
                 std::max_element(sample_count.begin(), sample_count.end()));
         }
 
-        void update(
-            Addr target_PC_in,
+        RangeTableEntry& update(
+            Addr target_pc_in,
             Addr req_addr_in,
             int shift_times_in,
             ContextID cID_in
         ) {
-            target_PC = target_PC_in;
+            target_pc = target_pc_in;
             cur_tail =  req_addr_in;
             cur_count = 0;
             cID = cID_in;
             valid = false;
             shift_times = shift_times_in;
             std::fill(sample_count.begin(), sample_count.end(), 0); 
+            return *this;
         }
     };
-
 
     std::vector<RangeTableEntry> rangeTable;
 
     int rg_ptr;
 
-    bool rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in);
+    void insertRG(Addr req_addr_in, Addr target_pc_in, ContextID cID_in);
+
+    bool rangeFilter(Addr pc_in, Addr addr_in, ContextID cID_in);
+
+
+    /** IndexQueue related */
+    struct IndexQueueEntry
+    {
+        Addr index_pc;
+        ContextID cID;
+        bool valid;
+        int tried;
+        int matched;
+
+        // normal constructor
+        IndexQueueEntry(Addr pc_in) 
+          : index_pc(pc_in), cID(0), valid(false), 
+            tried(0), matched(0) {};
+
+        // init constructor
+        IndexQueueEntry(bool valid = false) {};
+
+        ~IndexQueueEntry() = default;
+
+        float getWeight() const { return (matched + 1) / tried; };
+
+        void validate() { valid = true; };
+
+        void invalidate() { valid = false; };
+
+        IndexQueueEntry& update(Addr index_pc_in, ContextID cID_in) {
+            index_pc = index_pc_in;
+            cID = cID_in;
+            valid = false;
+            tried = 0;
+            matched = 0;
+            return *this;
+        };
+    };
+    std::vector<IndexQueueEntry> indexQueue;
+
+    int iq_ptr;
+
+    // TODO: insert from Stride Hit
+    void insertIndexQueue(Addr index_pc, ContextID cID_in);
+
+    void pickIndexPC();
+
+    void matchUpdate(Addr index_pc);
 
 
     /** IndirectCandidateScoreboard related*/
     struct ICSEntry
     {
+        Addr index_pc;
+        ContextID cID;
         bool valid;
-        Addr subscribe_pc;
+        int candidate_num;
+
+        std::unordered_map<Addr, int> miss_count;
+
+        // normal constructor
+        ICSEntry(Addr index_pc) : cID(0), valid(false) {};
+
+        // init constructor
+        ICSEntry(int candidate_num, bool valid = false)
+         : candidate_num(candidate_num), valid(valid) {};
+
+        ~ICSEntry() = default;
+
+        void validate() { valid = true; };
+
+        void invalidate() { valid = false; };
+
+        bool updateMiss (Addr miss_pc, int miss_thred);
+
+        ICSEntry& update(Addr index_pc_in, ContextID cID_in) {
+            index_pc = index_pc_in;
+            cID = cID_in;
+            valid = false;
+            miss_count.clear();
+            return *this;
+        };
     };
     std::vector<ICSEntry> indirectCandidateScoreboard;
 
+    void notifyICSMiss(Addr miss_addr, Addr miss_pc_in, ContextID cID_in);
+
+    void insertICS(Addr index_pc_in, ContextID cID_in);
+
+
+    EventFunctionWrapper checkNewIndexEvent;
+
+    int detect_period;
+
+    int ics_miss_threshold;
+
+    int ics_candidate_num;
 
     /** RelationTable related */
     struct RTEntry
@@ -279,7 +370,7 @@ class DiffMatching : public Stride
 
     bool findRTE(Addr index_pc, Addr target_pc, ContextID cID);
 
-    RTEntry* insertRTE(
+    RTEntry* insertRT(
         const iddt_ent_t& iddt_ent_match, const tadt_ent_t& tadt_ent_match,
         int iddt_match_point, unsigned int shift, ContextID cID
     );
