@@ -929,6 +929,10 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
         blk->setPrefetched();
     }
 
+    if (blk && pkt->req->hasPC()) {
+        blk->setPC(pkt->req->getPC());
+    }
+
     if (!mshr->hasLockedRMWReadTarget()) {
         maintainClusivity(targets.hasFromCache, blk);
 
