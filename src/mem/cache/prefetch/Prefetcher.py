@@ -693,7 +693,7 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     cxx_class = 'gem5::prefetch::DiffMatching'
     cxx_header = "mem/cache/prefetch/diff_matching.hh"
                 
-    iq_ent_num = Param.Usigned(16, "Number of entres of iq")
+    iq_ent_num = Param.Unsigned(16, "Number of entres of iq")
 
     iddt_ent_num = Param.Unsigned(8, "Number of entries of iddt")
     ics_ent_num = Param.Unsigned(8, "Number of entries of ics")

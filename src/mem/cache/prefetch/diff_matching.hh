@@ -136,8 +136,8 @@ class DiffMatching : public Stride
     int iddt_ptr;
     int tadt_ptr;
 
-    iddt_ent_t* insertIDDT(Addr index_pc_in, ContextID cID_in);
-    tadt_ent_t* insertTADT(Addr target_pc_in, ContextID cID_in);
+    void insertIDDT(Addr index_pc_in, ContextID cID_in);
+    void insertTADT(Addr target_pc_in, ContextID cID_in);
 
     /** RangeTable related */
 
@@ -243,7 +243,7 @@ class DiffMatching : public Stride
 
         ~IndexQueueEntry() = default;
 
-        float getWeight() const { return (matched + 1) / tried; };
+        float getWeight() const { return (matched + 1) / (tried + 1e-8); };
 
         void validate() { valid = true; };
 
@@ -267,7 +267,7 @@ class DiffMatching : public Stride
 
     void pickIndexPC();
 
-    void matchUpdate(Addr index_pc);
+    void matchUpdate(Addr index_pc_in, Addr target_pc_in, ContextID cID_in);
 
 
     /** IndirectCandidateScoreboard related*/
@@ -275,8 +275,8 @@ class DiffMatching : public Stride
     {
         Addr index_pc;
         ContextID cID;
-        bool valid;
         int candidate_num;
+        bool valid;
 
         std::unordered_map<Addr, int> miss_count;
 
@@ -305,12 +305,16 @@ class DiffMatching : public Stride
     };
     std::vector<ICSEntry> indirectCandidateScoreboard;
 
+    int ics_ptr;
+
     void notifyICSMiss(Addr miss_addr, Addr miss_pc_in, ContextID cID_in);
 
     void insertICS(Addr index_pc_in, ContextID cID_in);
 
 
     EventFunctionWrapper checkNewIndexEvent;
+
+    bool auto_detect;
 
     int detect_period;
 
@@ -340,8 +344,12 @@ class DiffMatching : public Stride
         // default constructor
         RTEntry(bool valid = false) : valid(valid) {};
 
+        void validate() { valid = true; };
+
+        void invalidate() { valid = false; };
+
         // update for new relation
-        RTEntry* update(
+        RTEntry& update(
             Addr index_pc_in,
             Addr target_pc_in,
             Addr target_base_addr_in,
@@ -360,7 +368,7 @@ class DiffMatching : public Stride
             cID = cID_in;
             valid = valid_in;
             
-            return this;
+            return *this;
         };
     };
     std::vector<RTEntry> relationTable;
@@ -370,7 +378,7 @@ class DiffMatching : public Stride
 
     bool findRTE(Addr index_pc, Addr target_pc, ContextID cID);
 
-    RTEntry* insertRT(
+    void insertRT(
         const iddt_ent_t& iddt_ent_match, const tadt_ent_t& tadt_ent_match,
         int iddt_match_point, unsigned int shift, ContextID cID
     );
@@ -383,6 +391,7 @@ class DiffMatching : public Stride
         void regStatsPerPC(const std::vector<Addr> PC_list);
         /** HashMap used to record statsPerPC */
         std::unordered_map<Addr, int> PCtoStatsIndex;
+        int max_per_pc;
         // STATS
         statistics::Scalar dmp_pfIdentified;
         statistics::Vector dmp_pfIdentified_perPC;
@@ -394,6 +403,8 @@ class DiffMatching : public Stride
   protected:
 
     void diffMatching(const tadt_ent_t& tadt_ent);
+
+    void callReadytoIssue(const PrefetchInfo& pfi) override;
 
   public:
     DiffMatching(const DiffMatchingPrefetcherParams &p);

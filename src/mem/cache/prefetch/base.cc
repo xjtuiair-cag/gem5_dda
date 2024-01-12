@@ -63,7 +63,8 @@ Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
   : address(addr), pc(pkt->req->hasPC() ? pkt->req->getPC() : 0),
     requestorId(pkt->req->requestorId()), validPC(pkt->req->hasPC()),
     secure(pkt->isSecure()), size(pkt->req->getSize()), write(pkt->isWrite()),
-    paddress(pkt->req->getPaddr()), cacheMiss(miss)
+    paddress(pkt->req->getPaddr()), cacheMiss(miss), 
+    cID(pkt->req->hasContextId() ? pkt->req->contextId() : 0)
 {
     unsigned int req_size = pkt->req->getSize();
     if (!write && miss) {
@@ -79,14 +80,14 @@ Base::PrefetchInfo::PrefetchInfo(PrefetchInfo const &pfi, Addr addr)
   : address(addr), pc(pfi.pc), requestorId(pfi.requestorId),
     validPC(pfi.validPC), secure(pfi.secure), size(pfi.size),
     write(pfi.write), paddress(pfi.paddress), cacheMiss(pfi.cacheMiss),
-    data(nullptr)
+    cID(pfi.cID), data(nullptr)
 {
 }
 
-Base::PrefetchInfo::PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID)
+Base::PrefetchInfo::PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID, ContextID cID)
   : address(addr), pc(pc), requestorId(requestorId), validPC(true),
     secure(false), size(0), write(false), paddress(0x0), cacheMiss(false),
-    data(nullptr)
+    cID(cID), data(nullptr)
 {
 }
 

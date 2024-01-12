@@ -158,6 +158,12 @@ class Stride : public Queued
      */
     PCTable* allocateNewContext(int context);
 
+    /**
+     * Call for advanced function when ready to issue stride prefetch.
+     * It should do nothing for StridePrefetcher itself.
+    */
+    virtual void callReadytoIssue(const PrefetchInfo& pfi) {};
+
   public:
     Stride(const StridePrefetcherParams &p);
 

@@ -118,6 +118,8 @@ class Base : public ClockedObject
         Addr paddress;
         /** Whether this event comes from a cache miss */
         bool cacheMiss;
+        /** ContexID of the pc */
+        ContextID cID;
         /** Pointer to the associated request data */
         uint8_t *data;
 
@@ -215,6 +217,11 @@ class Base : public ClockedObject
             return cacheMiss;
         }
 
+        ContextID getcID() const
+        {
+            return cID;
+        }
+
         /**
          * Gets the associated data of the request triggering the event
          * @param Byte ordering of the stored data
@@ -271,7 +278,7 @@ class Base : public ClockedObject
          * Fake PrefetchInfo in order to triggering prefetch 
          * by cache refill
          */
-        PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID);
+        PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID, ContextID cID);
 
         ~PrefetchInfo()
         {

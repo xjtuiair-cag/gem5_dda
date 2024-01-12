@@ -34,7 +34,9 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     indexQueue(p.iq_ent_num),
     iq_ptr(0),
     indirectCandidateScoreboard(p.ics_ent_num, ICSEntry(p.ics_candidate_num, false)),
+    ics_ptr(0),
     checkNewIndexEvent([this] { pickIndexPC(); }, this->name()),
+    auto_detect(p.auto_detect),
     detect_period(p.detect_period),
     ics_miss_threshold(p.ics_miss_threshold),
     ics_candidate_num(p.ics_candidate_num),
@@ -42,9 +44,7 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ptr(0),
     statsDMP(this)
 {
-    if (p.auto_detect) {
-        schedule(checkNewIndexEvent, curTick() + clockPeriod() * detect_period);
-    } else {
+    if (!p.auto_detect) {
         std::vector<Addr> pc_list_for_stats;
 
         // init IDDT
@@ -53,6 +53,10 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
                 indexDataDeltaTable[iddt_ptr].update(index_pc, 0, 0).validate();
                 iddt_ptr++;
             }
+            pc_list_for_stats.insert(
+                pc_list_for_stats.end(), p.index_pc_init.begin(), p.index_pc_init.end()
+            );
+        }
 
         // init TADT
         if (!p.target_pc_init.empty()) {
@@ -60,6 +64,10 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
                 targetAddrDeltaTable[tadt_ptr].update(target_pc, 0, 0).validate();
                 tadt_ptr++;
             }
+            pc_list_for_stats.insert(
+                pc_list_for_stats.end(), p.target_pc_init.begin(), p.target_pc_init.end()
+            );
+        }
 
         // init RangeTable
         if (!p.range_pc_init.empty()) {
@@ -82,11 +90,20 @@ DiffMatching::~DiffMatching()
 
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
     : statistics::Group(parent),
+    max_per_pc(64),
     ADD_STAT(dmp_pfIdentified, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified"),
     ADD_STAT(dmp_pfIdentified_perPC, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified")
 {
+    using namespace statistics;
+
+    dmp_pfIdentified.flags(nozero | nonan);
+
+    dmp_pfIdentified_perPC 
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
 }
 
 void
@@ -99,11 +116,6 @@ DiffMatching::DMPStats::regStatsPerPC(const std::vector<Addr> PC_list)
 
     int PC_list_len = PC_list.size();
 
-    dmp_pfIdentified_perPC 
-        .init(PC_list_len)
-        .flags(total | nozero | nonan)
-        ;
-    
     for (int i = 0; i < PC_list_len; i++) {
         if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
 
@@ -127,7 +139,7 @@ DiffMatching::pickIndexPC()
 
         if (!iq_ent.valid) continue;
         
-        float try_weight = iq_ent.get_weight();
+        float try_weight = iq_ent.getWeight();
         if (try_weight > cur_weight) {
             cur_weight = try_weight;
             choosed_ent = &iq_ent;
@@ -139,20 +151,35 @@ DiffMatching::pickIndexPC()
         choosed_ent->tried++;
         insertICS(choosed_ent->index_pc, choosed_ent->cID);
         insertIDDT(choosed_ent->index_pc, choosed_ent->cID);
+
+        DPRINTF(
+            DMP, "pick for ICS: indexPC %llx cID %d\n", 
+            choosed_ent->index_pc, choosed_ent->cID
+        );
     }
 
     // schedule next try
-    schedule(checkNewIndexEvent, curTick() + clockPeriod() * detect_period);
+    if (auto_detect) {
+        schedule(checkNewIndexEvent, curTick() + clockPeriod() * detect_period);
+    }
 }
 
 void 
-DiffMatching::matchUpdate(Addr index_pc)
+DiffMatching::matchUpdate(Addr index_pc_in, Addr target_pc_in, ContextID cID_in)
 {
-    // TODO:
-    // update IndexQueueEntry tried
+    // update IndexQueueEntry matched 
+    for (auto& iq_ent : indexQueue) {
+
+        if (!iq_ent.valid) continue;
+
+        if (iq_ent.index_pc == index_pc_in && iq_ent.cID == cID_in) {
+            iq_ent.matched++;
+            break;
+        }
+    }
 
     // insert matched target pc as new index pc
-
+    insertIndexQueue(target_pc_in, cID_in);
 }
 
 bool
@@ -184,13 +211,16 @@ DiffMatching::notifyICSMiss(Addr miss_addr, Addr miss_pc_in, ContextID cID_in)
 
         if (!ics_ent.valid) continue;
 
-        if (ics.cID != cID_in) continue;
+        if (ics_ent.cID != cID_in) continue;
 
         if (ics_ent.updateMiss(miss_pc_in, ics_candidate_num)) {
             // try insert new entry to TADT and RangeTable
             // IDDT entry should be inserted by IndexQueue
             insertTADT(miss_pc_in, cID_in);
             insertRG(miss_addr, miss_pc_in, cID_in);
+
+            DPRINTF(DMP, "ICS select: targetPC %llx cID %d\n", miss_pc_in, cID_in);
+
             return;
         }
     }
@@ -204,12 +234,14 @@ DiffMatching::insertIndexQueue(Addr index_pc_in, ContextID cID_in)
 
         if (!iq_ent.valid) continue;
 
-        if (iq_ent.index_pc == index_pc && iq_ent.cID == cID_in) return;
+        if (iq_ent.index_pc == index_pc_in && iq_ent.cID == cID_in) return;
     }
 
     // insert to position iq_ptr
     indexQueue[iq_ptr].update(index_pc_in, cID_in).validate();
     iq_ptr = (iq_ptr + 1) % iq_ent_num;
+
+    DPRINTF(DMP, "insert indexQueue: indexPC %llx cID %d\n", index_pc_in, cID_in);
 }
 
 void
@@ -220,12 +252,14 @@ DiffMatching::insertICS(Addr index_pc_in, ContextID cID_in)
 
         if (!ics_ent.valid) continue;
 
-        if (iq_ent.index_pc == index_pc_in && iq_ent.cID == cID_in) return;
+        if (ics_ent.index_pc == index_pc_in && ics_ent.cID == cID_in) return;
     }
 
     // insert to position ics_ptr
     indirectCandidateScoreboard[ics_ptr].update(index_pc_in, cID_in).validate();
     ics_ptr = (ics_ptr + 1) % ics_ent_num;
+
+    DPRINTF(DMP, "insert ICS: indexPC %llx cID %d\n", index_pc_in, cID_in);
 }
 
 void
@@ -234,14 +268,16 @@ DiffMatching::insertIDDT(Addr index_pc_in, ContextID cID_in)
     // check if already exist
     for (auto& iddt_ent : indexDataDeltaTable) {
 
-        if (!iddt_ent.valid) continue;
+        if (!iddt_ent.isValid()) continue;
 
-        if (iq_ent.pc == index_pc_in && iq_ent.cID == cID_in) return;
+        if (iddt_ent.getPC() == index_pc_in && iddt_ent.getContextId() == cID_in) return;
     }
 
     // insert to position iddt_ptr
     indexDataDeltaTable[iddt_ptr].update(index_pc_in, cID_in).validate();
     iddt_ptr = (iddt_ptr + 1) % iddt_ent_num;
+
+    DPRINTF(DMP, "insert IDDT: indexPC %llx cID %d\n", index_pc_in, cID_in);
 }
 
 void
@@ -250,14 +286,16 @@ DiffMatching::insertTADT(Addr target_pc_in, ContextID cID_in)
     // check if already exist
     for (auto& tadt_ent : targetAddrDeltaTable) {
 
-        if (!tadt_ent.valid) continue;
+        if (!tadt_ent.isValid()) continue;
 
-        if (iq_ent.pc == target_pc_in && iq_ent.cID == cID_in) return;
+        if (tadt_ent.getPC() == target_pc_in && tadt_ent.getContextId() == cID_in) return;
     }
 
     // insert to position tadt_ptr
-    targetAddrDeltaTable[tadt_ptr].update(index_pc_in, cID_in).validate();
+    targetAddrDeltaTable[tadt_ptr].update(target_pc_in, cID_in).validate();
     tadt_ptr = (tadt_ptr + 1) % tadt_ent_num;
+
+    DPRINTF(DMP, "insert TADT: targetPC %llx cID %d\n", target_pc_in, cID_in);
 }
 
 void
@@ -268,7 +306,7 @@ DiffMatching::insertRG(Addr req_addr_in, Addr target_pc_in, ContextID cID_in)
 
         if (!rg_ent.valid) continue;
 
-        if (rg_ent.target_pc == target_pc_in && iq_ent.cID == cID_in) return;
+        if (rg_ent.target_pc == target_pc_in && rg_ent.cID == cID_in) return;
     }
 
     // insert 4 rangeTableRntry for different shift values
@@ -278,10 +316,12 @@ DiffMatching::insertRG(Addr req_addr_in, Addr target_pc_in, ContextID cID_in)
         ).validate();
         rg_ptr = (rg_ptr+1) % rg_ent_num;
     }
+
+    DPRINTF(DMP, "insert RG: targetPC %llx cID %d\n", target_pc_in, cID_in);
 }
 
 void
-DiffMatching::diffMatching(const DiffMatching::tadt_ent_t& tadt_ent)
+DiffMatching::diffMatching(const tadt_ent_t& tadt_ent)
 {
     // ready flag check 
     assert(tadt_ent.isValid() && tadt_ent.isReady());
@@ -309,9 +349,10 @@ DiffMatching::diffMatching(const DiffMatching::tadt_ent_t& tadt_ent)
                 if (t_start == tadt_diff_num) {
                     // match success
                     // insert pattern to RelationTable
-                    insertRTE(iddt_ent, tadt_ent, i_start+tadt_diff_num, shift_try, tadt_ent_cID);
+                    insertRT(iddt_ent, tadt_ent, i_start+tadt_diff_num, shift_try, tadt_ent_cID);
 
                     // match updata
+                    matchUpdate(iddt_ent.getPC(), tadt_ent.getPC(), tadt_ent.getContextId());
                 }
 
             }
@@ -344,10 +385,10 @@ DiffMatching::findRTE(Addr index_pc, Addr target_pc, ContextID cID)
     return false;
 }
 
-DiffMatching::RTEntry&
+void
 DiffMatching::insertRT(
-    const DiffMatching::iddt_ent_t& iddt_ent_match, 
-    const DiffMatching::tadt_ent_t& tadt_ent_match,
+    const iddt_ent_t& iddt_ent_match, 
+    const tadt_ent_t& tadt_ent_match,
     int iddt_match_point, unsigned int shift, ContextID cID)
 {
     Addr new_index_pc = iddt_ent_match.getPC();
@@ -355,7 +396,7 @@ DiffMatching::insertRT(
 
     // check if pattern already exist
     if (findRTE(new_index_pc, new_target_pc, cID)) {
-        return nullptr;
+        return;
     }
 
     // calculate the target base address
@@ -387,7 +428,7 @@ DiffMatching::insertRT(
         new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type
     );
 
-    RTEntry& new_rte = relationTable[rt_ptr].update(
+    relationTable[rt_ptr].update(
         new_index_pc,
         new_target_pc,
         target_base_addr,
@@ -396,11 +437,8 @@ DiffMatching::insertRT(
         indir_range, // TODO: dynamic detection
         cID,
         true
-    );
-    new_rte.validate();
+    ).validate();
     rt_ptr = (rt_ptr+1) % rt_ent_num;
-
-    return new_rte;
 }
 
 bool
@@ -640,7 +678,10 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
 
             /** get a fake pfi, generator pc is target_pc for chain-trigger */
-            PrefetchInfo fake_pfi(pf_addr, rt_ent.target_pc, requestorId);
+            PrefetchInfo fake_pfi(
+                pf_addr, rt_ent.target_pc, requestorId,
+                pkt->req->hasContextId() ? pkt->req->contextId() : 0 
+            );
             
             /* filter repeat request */
             if (queueFilter) {
@@ -691,15 +732,15 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
 void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
-    if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-        for (auto& rt_ent: relationTable) { 
-            if (rt_ent.index_pc == pkt->req->getPC())
-            {
-                rt_ent.cID = pkt->req->contextId();
-            }
-        }
-        // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
-    }
+    //if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+    //    for (auto& rt_ent: relationTable) { 
+    //        if (rt_ent.index_pc == pkt->req->getPC())
+    //        {
+    //            rt_ent.cID = pkt->req->contextId();
+    //        }
+    //    }
+    //    // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
+    //}
     
     if (pfi.isCacheMiss()) {
         // Miss
@@ -711,7 +752,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         notifyICSMiss(
             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
-            pkt->req->hasContextId ? pkt->req->contextId() : 0
+            pkt->req->hasContextId () ? pkt->req->contextId() : 0
         );        
 
     } else {
@@ -727,6 +768,18 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 
     Queued::notify(pkt, pfi);
 }
+
+void
+DiffMatching::callReadytoIssue(const PrefetchInfo& pfi) 
+{
+    Addr pc = pfi.getPC();
+    insertIndexQueue(pc, pfi.getcID());
+    if (auto_detect && !checkNewIndexEvent.scheduled()) {
+        // schedule next index pick
+        schedule(checkNewIndexEvent, curTick() + clockPeriod() * detect_period);
+    }
+}
+
 void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {

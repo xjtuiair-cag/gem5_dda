@@ -168,6 +168,8 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
             return;
         }
 
+        callReadytoIssue(pfi);
+
         // Generate up to degree prefetches
         for (int d = 1; d <= degree; d++) {
             // Round strides up to atleast 1 cacheline
