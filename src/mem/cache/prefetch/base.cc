@@ -116,6 +116,10 @@ Base::Base(const BasePrefetcherParams &p)
       prefetchStats(this), issuedPrefetches(0),
       usefulPrefetches(0), tlb(nullptr)
 {
+    if (!p.stats_pc_list.empty()) {
+        prefetchStats.regStatsPerPC(p.stats_pc_list);
+        stats_pc_list = p.stats_pc_list;
+    }
 }
 
 void
@@ -131,7 +135,6 @@ Base::setCache(BaseCache *_cache)
 
 Base::StatGroup::StatGroup(statistics::Group *parent)
   : statistics::Group(parent),
-    max_per_pc(64),
     ADD_STAT(demandMshrMisses, statistics::units::Count::get(),
         "demands not covered by prefetchs"),
     ADD_STAT(demandMshrMissesPerPC, statistics::units::Count::get(),
@@ -141,6 +144,8 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     ADD_STAT(pfIssuedPerPC, statistics::units::Count::get(),
         "number of hwpf issued"),
     ADD_STAT(pfUnused, statistics::units::Count::get(),
+             "number of HardPF blocks evicted w/o reference"),
+    ADD_STAT(pfUnusedPerPC, statistics::units::Count::get(),
              "number of HardPF blocks evicted w/o reference"),
     ADD_STAT(pfUseful, statistics::units::Count::get(),
         "number of useful prefetch"),
@@ -174,6 +179,8 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     ADD_STAT(pfHitInWBPerPC, statistics::units::Count::get(),
         "number of prefetches hit in the Write Buffer"),
     ADD_STAT(pfLate, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLatePerPC, statistics::units::Count::get(),
         "number of late prefetches (hitting in cache, MSHR or WB)")
 {
     using namespace statistics;
@@ -191,11 +198,17 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     accuracy.flags(total | nonan);
     accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
 
+    int max_per_pc = 32;
+
     demandMshrMissesPerPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
     pfIssuedPerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfUnusedPerPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
@@ -224,31 +237,29 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
 
     coveragePerPC.flags(nozero | nonan);
     coveragePerPC = pfUsefulPerPC / (pfUsefulPerPC + demandMshrMissesPerPC);
+
+    pfLatePerPC.flags(total | nozero | nonan);
+    pfLatePerPC = pfHitInCachePerPC + pfHitInMSHRPerPC + pfHitInWBPerPC;
+
 }
 
 void 
-Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
+Base::StatGroup::regStatsPerPC(const std::vector<Addr> &stats_pc_list)
 {
     using namespace statistics;
 
-    assert(!PC_list.empty());
-    assert(PCtoStatsIndex.empty());
-
-    int PC_list_len = PC_list.size();
-    assert(PC_list_len < max_per_pc);
-
+    int max_per_pc = 32;
+    assert(stats_pc_list.size() < max_per_pc);
     
-    for (int i = 0; i < PC_list_len; i++) {
-        if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
-
-        PCtoStatsIndex.insert({PC_list[i], i});
+    for (int i = 0; i < stats_pc_list.size(); i++) {
 
         std::stringstream stream;
-        stream << std::hex << PC_list[i];
+        stream << std::hex << stats_pc_list[i];
         std::string pc_name = stream.str();
 
         demandMshrMissesPerPC.subname(i, pc_name);
         pfIssuedPerPC.subname(i, pc_name);
+        pfUnusedPerPC.subname(i, pc_name); 
         pfUsefulPerPC.subname(i, pc_name);
         pfHitInCachePerPC.subname(i, pc_name);
         pfHitInMSHRPerPC.subname(i, pc_name);
@@ -257,6 +268,7 @@ Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
         accuracyPerPC.subname(i, pc_name);
         timely_accuracy_perPC.subname(i, pc_name);
         coveragePerPC.subname(i, pc_name);
+        pfLatePerPC.subname(i, pc_name);
     }
 }
 
@@ -358,12 +370,14 @@ Base::probeNotify(const PacketPtr &pkt, bool miss)
         usefulPrefetches += 1;
         prefetchStats.pfUseful++;
 
-        Addr pkt_pc = pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr;
-        if (prefetchStats.PCtoStatsIndex.find(pkt_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.pfUsefulPerPC[
-                prefetchStats.PCtoStatsIndex[pkt_pc]
-                ]++;
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    prefetchStats.pfUsefulPerPC[i]++;
+                    break;
+                }
+            }
         }
 
         if (miss)

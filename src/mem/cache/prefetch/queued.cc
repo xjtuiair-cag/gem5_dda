@@ -107,6 +107,9 @@ Queued::Queued(const QueuedPrefetcherParams &p)
       tagPrefetch(p.tag_prefetch),
       throttleControlPct(p.throttle_control_percentage), statsQueued(this)
 {
+    if (!p.stats_pc_list.empty()) {
+        statsQueued.regQueuedPerPC(stats_pc_list);
+    }
 }
 
 Queued::~Queued()
@@ -188,6 +191,15 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
                 delete itr->pkt;
                 itr = pfq.erase(itr);
                 statsQueued.pfRemovedDemand++;
+                if (itr->pfInfo.hasPC()) {
+                    Addr req_pc = itr->pfInfo.getPC();
+                    for (int i = 0; i < stats_pc_list.size(); i++) {
+                        if (req_pc == stats_pc_list[i]) {
+                            statsQueued.pfRemovedDemandPerPC[i]++;
+                            break;
+                        }
+                    }
+                }
             } else {
                 ++itr;
             }
@@ -257,12 +269,14 @@ Queued::getPacket()
     prefetchStats.pfIssued++;
     issuedPrefetches += 1;
 
-    Addr pkt_pc = pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr;
-    if (prefetchStats.PCtoStatsIndex.find(pkt_pc) != 
-        prefetchStats.PCtoStatsIndex.end()) {
-        prefetchStats.pfIssuedPerPC[
-            prefetchStats.PCtoStatsIndex[pkt_pc]
-            ]++;
+    if (pkt->req->hasPC()) {
+        Addr req_pc = pkt->req->getPC();
+        for (int i = 0; i < stats_pc_list.size(); i++) {
+            if (req_pc == stats_pc_list[i]) {
+                prefetchStats.pfIssuedPerPC[i]++;
+                break;
+            }
+        }
     }
 
     assert(pkt != nullptr);
@@ -278,12 +292,21 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
              "number of prefetch candidates identified"),
     ADD_STAT(pfBufferHit, statistics::units::Count::get(),
              "number of redundant prefetches already in prefetch queue"),
+    ADD_STAT(pfBufferHitPerPC, statistics::units::Count::get(),
+             "number of redundant prefetches already in prefetch queue"),
     ADD_STAT(pfInCache, statistics::units::Count::get(),
+             "number of redundant prefetches already in cache/mshr dropped"),
+    ADD_STAT(pfInCachePerPC, statistics::units::Count::get(),
              "number of redundant prefetches already in cache/mshr dropped"),
     ADD_STAT(pfRemovedDemand, statistics::units::Count::get(),
              "number of prefetches dropped due to a demand for the same "
              "address"),
+    ADD_STAT(pfRemovedDemandPerPC, statistics::units::Count::get(),
+             "number of prefetches dropped due to a demand for the same "
+             "address"),
     ADD_STAT(pfRemovedFull, statistics::units::Count::get(),
+             "number of prefetches dropped due to prefetch queue size"),
+    ADD_STAT(pfRemovedFullPerPC, statistics::units::Count::get(),
              "number of prefetches dropped due to prefetch queue size"),
     ADD_STAT(pfSpanPage, statistics::units::Count::get(),
              "number of prefetches that crossed the page"),
@@ -293,6 +316,47 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
              "number of pfq empty and translation not avaliable immediately "
              "when there is a chance for prefetch")
 {
+    using namespace statistics;
+
+    int max_per_pc = 32;
+
+    pfBufferHitPerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfInCachePerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfRemovedDemandPerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfRemovedFullPerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+}
+
+void
+Queued::QueuedStats::regQueuedPerPC(const std::vector<Addr>& stats_pc_list)
+{
+    using namespace statistics;
+
+    int max_per_pc = 32;
+    assert(stats_pc_list.size() < max_per_pc);
+
+    for (int i = 0; i < stats_pc_list.size(); i++) {
+
+        std::stringstream stream;
+        stream << std::hex << stats_pc_list[i];
+        std::string pc_name = stream.str();
+
+        pfBufferHitPerPC.subname(i, pc_name);
+        pfInCachePerPC.subname(i, pc_name);
+        pfRemovedDemandPerPC.subname(i, pc_name);
+        pfRemovedFullPerPC.subname(i, pc_name);
+    }
 }
 
 
@@ -332,6 +396,16 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
         if (cacheSnoop && (inCache(target_paddr, it->pfInfo.isSecure()) ||
                     inMissQueue(target_paddr, it->pfInfo.isSecure()))) {
             statsQueued.pfInCache++;
+            if (it->pkt->req->hasPC()) {
+                Addr req_pc = it->pkt->req->getPC();
+                for (int i = 0; i < stats_pc_list.size(); i++) {
+                    if (req_pc == stats_pc_list[i]) {
+                        statsQueued.pfInCachePerPC[i]++;
+                        break;
+                    }
+                }
+            }
+
             DPRINTF(HWPrefetch, "Dropping redundant in "
                     "cache/MSHR prefetch addr:%#x\n", target_paddr);
         } else {
@@ -361,6 +435,16 @@ Queued::alreadyInQueue(std::list<DeferredPacket> &queue,
     /* If the address is already in the queue, update priority and leave */
     if (it != queue.end()) {
         statsQueued.pfBufferHit++;
+        if (pfi.hasPC()) {
+            Addr req_pc = pfi.getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    statsQueued.pfBufferHitPerPC[i]++;
+                    break;
+                }
+            }
+        }
+
         if (it->priority < priority) {
             /* Update priority value and position in the queue */
             it->priority = priority;
@@ -468,6 +552,16 @@ Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
             (inCache(target_paddr, new_pfi.isSecure()) ||
             inMissQueue(target_paddr, new_pfi.isSecure()))) {
         statsQueued.pfInCache++;
+        if (new_pfi.hasPC()) {
+            Addr req_pc = new_pfi.getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    statsQueued.pfInCachePerPC[i]++;
+                    break;
+                }
+            }
+        }
+
         DPRINTF(HWPrefetch, "Dropping redundant in "
                 "cache/MSHR prefetch addr:%#x\n", target_paddr);
         return;
@@ -500,6 +594,15 @@ Queued::addToQueue(std::list<DeferredPacket> &queue,
     /* Verify prefetch buffer space for request */
     if (queue.size() == queueSize) {
         statsQueued.pfRemovedFull++;
+        if (dpp.pfInfo.hasPC()) {
+            Addr req_pc = dpp.pfInfo.getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    statsQueued.pfRemovedFullPerPC[i]++;
+                    break;
+                }
+            }
+        }
         /* Lowest priority packet */
         iterator it = queue.end();
         panic_if (it == queue.begin(),

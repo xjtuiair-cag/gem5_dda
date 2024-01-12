@@ -178,12 +178,17 @@ class Queued : public Base
     struct QueuedStats : public statistics::Group
     {
         QueuedStats(statistics::Group *parent);
+        void regQueuedPerPC(const std::vector<Addr>& stats_pc_list);
         // STATS
         statistics::Scalar pfIdentified;
         statistics::Scalar pfBufferHit;
+        statistics::Vector pfBufferHitPerPC;
         statistics::Scalar pfInCache;
+        statistics::Vector pfInCachePerPC;
         statistics::Scalar pfRemovedDemand;
+        statistics::Vector pfRemovedDemandPerPC;
         statistics::Scalar pfRemovedFull;
+        statistics::Vector pfRemovedFullPerPC;
         statistics::Scalar pfSpanPage;
         statistics::Scalar pfUsefulSpanPage;
         statistics::Scalar pfTransFailed;

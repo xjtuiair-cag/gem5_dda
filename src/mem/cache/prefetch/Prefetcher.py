@@ -90,6 +90,8 @@ class BasePrefetcher(ClockedObject):
         "4KiB", "Size of pages for virtual addresses"
     )
 
+    stats_pc_list = VectorParam.Addr([], "Monitor PC list in stats")
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._events = []

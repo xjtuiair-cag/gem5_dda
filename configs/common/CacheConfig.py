@@ -48,6 +48,9 @@ from gem5.runtime import get_runtime_isa
 from common.Caches import *
 from common import ObjectList
 
+monitor_pc_list = [
+    0x400c70, 0x400c7c, 0x400c80, 0x400ca0, 0x400ca4, 0x400cc0, 0x400ccc, 0x400cdc
+]
 
 def _get_hwp(hwp_option):
     if hwp_option == None:
@@ -203,12 +206,20 @@ def config_cache(options, system):
                 icache, dcache, iwalkcache, dwalkcache
             )
 
+            system.cpu[i].dcache.stats_pc_list = monitor_pc_list
+
+            if options.l1d_hwp_type == "StridePrefetcher":
+                system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
+
             if options.l1d_hwp_type == "DiffMatchingPrefetcher":
                 system.cpu[i].dcache.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].dcache)
 
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
                 system.cpu[i].dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.cpu[i].dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+
+                system.l2.prefetcher.queue_size = 1024*1024*16
+                system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
 
                 if options.dmp_init_bench:
                     system.cpu[i].dcache.prefetcher.index_pc_init = \
@@ -220,6 +231,7 @@ def config_cache(options, system):
 
             # enable VA for all prefetcher
             if options.l1d_hwp_type:
+                system.cpu[i].dcache.prefetcher.stats_pc_list = monitor_pc_list 
                 system.cpu[i].dcache.prefetcher.use_virtual_addresses = True
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to DCache prefetcher.")
@@ -274,6 +286,9 @@ def config_cache(options, system):
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+                system.l2.prefetcher.queue_size = 1024*1024*16
+                system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
+                #system.l2.prefetcher.latency = 13
 
                 if options.dmp_init_bench:
                     system.l2.prefetcher.index_pc_init = \
@@ -286,9 +301,12 @@ def config_cache(options, system):
             # enable VA for all prefetcher
             if options.l2_hwp_type:
                 system.l2.prefetcher.use_virtual_addresses = True
+                system.l2.prefetcher.stats_pc_list = monitor_pc_list 
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to L2 prefetcher.")
                     system.l2.prefetcher.registerTLB(system.cpu[i].mmu.dtb)
+
+            system.l2.stats_pc_list = monitor_pc_list
 
             system.cpu[i].connectAllPorts(
                 system.tol2bus.cpu_side_ports,
@@ -412,6 +430,8 @@ def config_three_level_cache(options, system):
 
                 system.cpu[i].l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.cpu[i].l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+                #system.l2.prefetcher.queue_size = 1024*1024*16
+                #system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
 
                 if options.dmp_init_bench:
                     system.cpu[i].l2.prefetcher.index_pc_init = \

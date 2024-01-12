@@ -173,6 +173,7 @@ class BaseCache(ClockedObject):
     # data cache.
     write_allocator = Param.WriteAllocator(NULL, "Write allocator")
 
+    stats_pc_list = VectorParam.Addr([], "Monitor PC list in stats")
 
 class Cache(BaseCache):
     type = "Cache"

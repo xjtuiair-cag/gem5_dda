@@ -336,6 +336,16 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
         stats.cmdStats(pkt).mshrUncacheable[pkt->req->requestorId()]++;
 
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    stats.cmdStats(pkt).mshrUncacheablePerPC[i]++;
+                    break;
+                }
+            }
+        }
+
         if (pkt->isWrite()) {
             allocateWriteBuffer(pkt, forward_time);
         } else {
