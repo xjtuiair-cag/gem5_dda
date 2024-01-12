@@ -254,7 +254,7 @@ def config_cache(options, system):
             system.cpu[i].mmu.dtb.size = getattr(options, "tlb_size", 64)
             system.cpu[i].mmu.stage2_dtb.size = getattr(options, "tlb_size", 64) // 2
 
-        #system.cpu[i].mmu.dtb.can_serialize = True
+        system.cpu[i].mmu.dtb.can_serialize = True
 
         # no need to edit for default False. Used to config here.
         # system.cpu[i].mmu.dtb.pf_translation_timing = False
@@ -274,7 +274,7 @@ def config_cache(options, system):
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
-                #system.l2.prefetcher.auto_detect = False
+                system.l2.prefetcher.auto_detect = False
 
                 if options.dmp_init_bench:
                     system.l2.prefetcher.index_pc_init = \
