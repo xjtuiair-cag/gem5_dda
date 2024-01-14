@@ -231,6 +231,7 @@ def config_cache(options, system):
 
             # enable VA for all prefetcher
             if options.l1d_hwp_type:
+                system.cpu[i].dcache.prefetcher.prefetch_on_access = True
                 system.cpu[i].dcache.prefetcher.stats_pc_list = monitor_pc_list 
                 system.cpu[i].dcache.prefetcher.use_virtual_addresses = True
                 if system.cpu[i].mmu.dtb:
