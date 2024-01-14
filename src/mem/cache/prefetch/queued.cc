@@ -142,6 +142,15 @@ Queued::printQueue(const std::list<DeferredPacket> &queue) const
     }
 }
 
+void
+Queued::printSize() const
+{
+    DPRINTF(
+        HWPrefetch, "pfq size %lu, pfqMissingTranslation size %lu\n", 
+        pfq.size(), pfqMissingTranslation.size()
+    );
+}
+
 size_t
 Queued::getMaxPermittedPrefetches(size_t total) const
 {
@@ -188,8 +197,6 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
                         "(cl: %#x), demand request going to the same addr\n",
                         itr->pfInfo.getAddr(),
                         blockAddress(itr->pfInfo.getAddr()));
-                delete itr->pkt;
-                itr = pfq.erase(itr);
                 statsQueued.pfRemovedDemand++;
                 if (itr->pfInfo.hasPC()) {
                     Addr req_pc = itr->pfInfo.getPC();
@@ -200,6 +207,8 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
                         }
                     }
                 }
+                delete itr->pkt;
+                itr = pfq.erase(itr);
             } else {
                 ++itr;
             }
@@ -258,7 +267,6 @@ Queued::getPacket()
     }
 
     if (pfq.empty()) {
-        statsQueued.pfTransFailed += 1;
         DPRINTF(HWPrefetch, "No hardware prefetches available.\n");
         return nullptr;
     }
@@ -314,6 +322,9 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
              "number of prefetches that is useful and crossed the page"),
     ADD_STAT(pfTransFailed, statistics::units::Count::get(),
              "number of pfq empty and translation not avaliable immediately "
+             "when there is a chance for prefetch"),
+    ADD_STAT(pfTransFailedPerPC, statistics::units::Count::get(),
+             "number of pfq empty and translation not avaliable immediately "
              "when there is a chance for prefetch")
 {
     using namespace statistics;
@@ -333,6 +344,10 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
         .flags(total | nozero | nonan)
         ;
     pfRemovedFullPerPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfTransFailedPerPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
@@ -356,6 +371,7 @@ Queued::QueuedStats::regQueuedPerPC(const std::vector<Addr>& stats_pc_list)
         pfInCachePerPC.subname(i, pc_name);
         pfRemovedDemandPerPC.subname(i, pc_name);
         pfRemovedFullPerPC.subname(i, pc_name);
+        pfTransFailedPerPC.subname(i, pc_name);
     }
 }
 
@@ -396,8 +412,8 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
         if (cacheSnoop && (inCache(target_paddr, it->pfInfo.isSecure()) ||
                     inMissQueue(target_paddr, it->pfInfo.isSecure()))) {
             statsQueued.pfInCache++;
-            if (it->pkt->req->hasPC()) {
-                Addr req_pc = it->pkt->req->getPC();
+            if (it->pfInfo.hasPC()) {
+                Addr req_pc = it->pfInfo.getPC();
                 for (int i = 0; i < stats_pc_list.size(); i++) {
                     if (req_pc == stats_pc_list[i]) {
                         statsQueued.pfInCachePerPC[i]++;
@@ -418,6 +434,17 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
         DPRINTF(HWPrefetch, "%s Translation of vaddr %#x failed, dropping "
                 "prefetch request %#x \n", tlb->name(),
                 it->translationRequest->getVaddr());
+
+        statsQueued.pfTransFailed += 1;
+        if (it->pfInfo.hasPC()) {
+            Addr req_pc = it->pfInfo.getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    statsQueued.pfTransFailedPerPC[i]++;
+                    break;
+                }
+            }
+        }
     }
     pfqMissingTranslation.erase(it);
 }
@@ -644,6 +671,9 @@ Queued::addToQueue(std::list<DeferredPacket> &queue,
 
     if (debug::HWPrefetchQueue)
         printQueue(queue);
+
+    if (debug::HWPrefetch)
+        printSize();
 }
 
 } // namespace prefetch

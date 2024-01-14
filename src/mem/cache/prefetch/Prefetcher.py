@@ -135,6 +135,7 @@ class QueuedPrefetcher(BasePrefetcher):
     abstract = True
     cxx_class = "gem5::prefetch::Queued"
     cxx_header = "mem/cache/prefetch/queued.hh"
+    cxx_exports = [PyBindMethod("printSize")]
     latency = Param.Int(1, "Latency for generated prefetches")
     queue_size = Param.Int(1024, "Maximum number of queued prefetches")
     max_prefetch_requests_with_pending_translation = Param.Int(
@@ -165,6 +166,9 @@ class QueuedPrefetcher(BasePrefetcher):
         "Percentage of requests \
         that can be throttled depending on the accuracy of the prefetcher.",
     )
+
+    def print_size(self):
+        self.getCCObject().printSize()
 
 
 class StridePrefetcherHashedSetAssociative(SetAssociative):

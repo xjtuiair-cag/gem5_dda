@@ -192,6 +192,7 @@ class Queued : public Base
         statistics::Scalar pfSpanPage;
         statistics::Scalar pfUsefulSpanPage;
         statistics::Scalar pfTransFailed;
+        statistics::Vector pfTransFailedPerPC;
     } statsQueued;
   public:
     using AddrPriority = std::pair<Addr, int32_t>;
@@ -213,6 +214,8 @@ class Queued : public Base
     }
 
     void printQueue(const std::list<DeferredPacket> &queue) const;
+
+    void printSize() const;
 
   protected:
 
