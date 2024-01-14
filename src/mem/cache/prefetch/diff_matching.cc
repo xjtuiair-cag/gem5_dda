@@ -220,6 +220,19 @@ DiffMatching::insertRTE(
         if (range_ent->target_PC != new_index_pc || range_ent->cID != cID) continue;
 
         new_range_type = new_range_type || range_ent->getRangeType();
+        
+        // Stride PC also should be classified as Range
+        // search for all requestor
+        for (auto it = pcTables.begin(); it != pcTables.end(); ++it) {
+            StrideEntry* entry = it->second.findEntry(new_index_pc, false);
+
+            if (entry && entry->confidence.calcSaturation() >= threshConf) {
+                new_range_type = true;
+                break;
+            }
+        }
+
+        if (new_range_type == true) break; 
     } 
 
     DPRINTF(DMP, "Insert RelationTable: "
