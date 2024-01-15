@@ -1307,6 +1307,10 @@ class BaseCache : public ClockedObject
         return tags->findBlock(addr, is_secure);
     }
 
+    CacheBlk* getCacheBlk(Addr addr, bool is_secure) const {
+        return tags->findBlock(addr, is_secure);
+    }
+
     bool hasBeenPrefetched(Addr addr, bool is_secure) const {
         CacheBlk *block = tags->findBlock(addr, is_secure);
         if (block) {

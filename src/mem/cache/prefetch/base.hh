@@ -416,8 +416,8 @@ class Base : public ClockedObject
     virtual void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) = 0;
 
     /** Notify prefetcher of cache fill */
-    virtual void notifyFill(const PacketPtr &pkt)
-    {}
+    virtual void notifyFill(const PacketPtr &pkt) {}
+    virtual void notifyFill(const PacketPtr &pkt, const u_int8_t* data_ptr) {}
 
     // Probe AddrReq to L1 for prefetch detection
     virtual void notifyL1Req(const PacketPtr &pkt) {}

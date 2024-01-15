@@ -255,7 +255,7 @@ class DiffMatching : public Stride
     void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) override;
     
     // Probe DataResp from Memory for prefetch generation
-    void notifyFill(const PacketPtr &pkt) override;
+    void notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr) override;
 
     // Probe AddrReq to L1 for prefetch detection
     void notifyL1Req(const PacketPtr &pkt) override;

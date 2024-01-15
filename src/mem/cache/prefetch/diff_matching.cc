@@ -423,7 +423,7 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
 }
 
 void
-DiffMatching::notifyFill(const PacketPtr &pkt)
+DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
 {
     /** use virtual address for prefetch */
     assert(tlb != nullptr);
@@ -448,9 +448,8 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
     }
 
     /* get response data */
-    assert(pkt->getSize() <= blkSize); 
     uint8_t fill_data[blkSize];
-    pkt->writeData(fill_data); 
+    std::memcpy(fill_data, data_ptr, blkSize);
 
     /* prinf response data in bytes */
     if (debug::HWPrefetch) {
@@ -580,7 +579,19 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                             pkt->req->getPaddr(), 
                             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
 
-        notifyFill(pkt); 
+        // TODO: Should we do further prefetch for high level cache prefetch ?
+        // e.g. L1 Prefetch Request access and hit at L2.
+        assert(pkt->isRequest());
+
+        if (!pkt->req->isPrefetch()) {
+            // use address in hit pkt to get the whole blkSize data, should be paddr.
+            CacheBlk* hit_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+            // always hit when you get here.
+            assert(hit_blk && hit_blk->data);
+
+            notifyFill(pkt, hit_blk->data);
+        }
     }
 
     Queued::notify(pkt, pfi);

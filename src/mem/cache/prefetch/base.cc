@@ -98,7 +98,10 @@ Base::PrefetchListener::notify(const PacketPtr &pkt)
     } else if (l1_resp) {
         parent.notifyL1Resp(pkt);
     } else if (isFill) {
-        parent.notifyFill(pkt);
+        assert(pkt->hasData());
+        assert(pkt->getSize() == parent.blkSize);
+        const uint8_t* fill_data_ptr = pkt->getConstPtr<u_int8_t>();
+        parent.notifyFill(pkt, fill_data_ptr);
     } else {
         parent.probeNotify(pkt, miss);
     }
