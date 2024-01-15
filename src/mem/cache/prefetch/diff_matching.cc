@@ -503,6 +503,14 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
             /** get a fake pfi, generator pc is target_pc for chain-trigger */
             PrefetchInfo fake_pfi(pf_addr, rt_ent.target_pc, requestorId);
             
+            statsDMP.dmp_pfIdentified++;
+            for (int i = 0; i < dmp_stats_pc.size(); i++) {
+                if (rt_ent.target_pc == dmp_stats_pc[i]) {
+                    statsDMP.dmp_pfIdentifiedPerPC[i]++;
+                    break;
+                }
+            }
+
             /* filter repeat request */
             if (queueFilter) {
                 if (alreadyInQueue(pfq, fake_pfi, priority)) {
@@ -535,13 +543,6 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
             dpp.tc = cache->system->threads[translation_req->contextId()];
 
             addToQueue(pfqMissingTranslation, dpp);
-            statsDMP.dmp_pfIdentified++;
-            for (int i = 0; i < dmp_stats_pc.size(); i++) {
-                if (rt_ent.target_pc == dmp_stats_pc[i]) {
-                    statsDMP.dmp_pfIdentifiedPerPC[i]++;
-                    break;
-                }
-            }
         }
 
         // try to do translation immediately
