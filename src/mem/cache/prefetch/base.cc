@@ -50,6 +50,7 @@
 #include "base/intmath.hh"
 #include "mem/cache/base.hh"
 #include "params/BasePrefetcher.hh"
+#include "debug/HWPrefetch.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -387,6 +388,10 @@ Base::probeNotify(const PacketPtr &pkt, bool miss)
             // This case happens when a demand hits on a prefetched line
             // that's not in the requested coherency state.
             prefetchStats.pfUsefulButMiss++;
+    }
+
+    if (!observeAccess(pkt, miss)) {
+        DPRINTF(HWPrefetch, "Prefetcher can't observe this access, dropped.\n");
     }
 
     // Verify this access type is observed by prefetcher

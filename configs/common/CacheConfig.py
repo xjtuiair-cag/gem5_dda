@@ -234,6 +234,7 @@ def config_cache(options, system):
                 system.cpu[i].dcache.prefetcher.prefetch_on_access = True
                 system.cpu[i].dcache.prefetcher.stats_pc_list = monitor_pc_list 
                 system.cpu[i].dcache.prefetcher.use_virtual_addresses = True
+                system.cpu[i].dcache.prefetcher.tag_vaddr = True
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to DCache prefetcher.")
                     system.cpu[i].dcache.prefetcher.registerTLB(system.cpu[i].mmu.dtb)
@@ -283,7 +284,7 @@ def config_cache(options, system):
 
             if options.l2_hwp_type == "DiffMatchingPrefetcher":
                 system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2)
-                system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+                # system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
@@ -301,7 +302,9 @@ def config_cache(options, system):
 
             # enable VA for all prefetcher
             if options.l2_hwp_type:
+                system.l2.prefetcher.prefetch_on_access = True
                 system.l2.prefetcher.use_virtual_addresses = True
+                system.l2.prefetcher.tag_vaddr = True
                 system.l2.prefetcher.stats_pc_list = monitor_pc_list 
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to L2 prefetcher.")

@@ -59,7 +59,8 @@ void
 Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
                                             RequestorID requestor_id,
                                             bool tag_prefetch,
-                                            Tick t) {
+                                            Tick t, 
+                                            bool tag_vaddr) {
     /* Create a prefetch memory request */
     RequestPtr req = std::make_shared<Request>(paddr, blk_size,
                                                 0, requestor_id);
@@ -73,6 +74,10 @@ Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
     if (tag_prefetch && pfInfo.hasPC()) {
         // Tag prefetch packet with  accessing pc
         pkt->req->setPC(pfInfo.getPC());
+        // TODO: Should also tag ContexID?
+    }
+    if (tag_vaddr) {
+        pkt->req->setVaddr(pfInfo.getAddr());
     }
     tick = t;
 }
@@ -104,9 +109,11 @@ Queued::Queued(const QueuedPrefetcherParams &p)
         p.max_prefetch_requests_with_pending_translation),
       latency(p.latency), queueSquash(p.queue_squash),
       queueFilter(p.queue_filter), cacheSnoop(p.cache_snoop),
-      tagPrefetch(p.tag_prefetch),
+      tagPrefetch(p.tag_prefetch), tagVaddr(p.tag_vaddr),
       throttleControlPct(p.throttle_control_percentage), statsQueued(this)
 {
+    assert(useVirtualAddresses == tagVaddr);
+
     if (!p.stats_pc_list.empty()) {
         statsQueued.regQueuedPerPC(stats_pc_list);
     }
@@ -427,7 +434,7 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
         } else {
             Tick pf_time = curTick() + clockPeriod() * latency;
             it->createPkt(target_paddr, blkSize, requestorId, tagPrefetch,
-                          pf_time);
+                          pf_time, tagVaddr);
             addToQueue(pfq, *it);
         }
     } else {
@@ -599,7 +606,7 @@ Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
     if (has_target_pa) {
         Tick pf_time = curTick() + clockPeriod() * latency;
         dpp.createPkt(target_paddr, blkSize, requestorId, tagPrefetch,
-                      pf_time);
+                      pf_time, tagVaddr);
         DPRINTF(HWPrefetch, "Prefetch queued. "
                 "addr:%#x priority: %3d tick:%lld.\n",
                 new_pfi.getAddr(), priority, pf_time);

@@ -115,7 +115,7 @@ class Queued : public Base
          * @param t time when the prefetch becomes ready
          */
         void createPkt(Addr paddr, unsigned blk_size, RequestorID requestor_id,
-                       bool tag_prefetch, Tick t);
+                       bool tag_prefetch, Tick t, bool tag_vaddr=false);
 
         /**
          * Sets the translation request needed to obtain the physical address
@@ -171,6 +171,9 @@ class Queued : public Base
 
     /** Tag prefetch with PC of generating access? */
     const bool tagPrefetch;
+
+    /** Tag prefetch with Vaddr if generating with virtual address */
+    const bool tagVaddr;
 
     /** Percentage of requests that can be throttled */
     const unsigned int throttleControlPct;

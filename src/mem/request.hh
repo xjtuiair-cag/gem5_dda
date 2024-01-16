@@ -836,6 +836,14 @@ class Request
         return _vaddr;
     }
 
+    void
+    setVaddr(Addr vaddr)
+    {
+        // set vaddr for prefetch request
+        privateFlags.set(VALID_VADDR);
+        _vaddr = vaddr;
+    }
+
     /** Accesssor for the requestor id. */
     RequestorID
     requestorId() const
