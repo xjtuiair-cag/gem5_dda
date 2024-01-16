@@ -26,7 +26,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     range_unit_param(p.range_unit),
     range_level_param(p.range_level),
     rt_ptr(0),
-    statsDMP(this)
+    statsDMP(this),
+    pf_helper(nullptr)
 {
     std::vector<Addr> pc_list;
 
@@ -223,13 +224,10 @@ DiffMatching::insertRTE(
         
         // Stride PC also should be classified as Range
         // search for all requestor
-        for (auto it = pcTables.begin(); it != pcTables.end(); ++it) {
-            StrideEntry* entry = it->second.findEntry(new_index_pc, false);
-
-            if (entry && entry->confidence.calcSaturation() >= threshConf) {
-                new_range_type = true;
-                break;
-            }
+        if(pf_helper) {
+            new_range_type = pf_helper->checkStride(new_index_pc);
+        } else {
+            new_range_type = this->checkStride(new_index_pc);
         }
 
         if (new_range_type == true) break; 
@@ -526,21 +524,21 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
             /* create pkt and req for dpp, fake for later translation*/
             DeferredPacket dpp(this, fake_pfi, 0, priority);
 
-            Tick pf_time = curTick() + clockPeriod() * latency;
-            dpp.createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-            dpp.pkt->req->setPC(rt_ent.target_pc);
-            dpp.pfInfo.setPC(rt_ent.target_pc);
-            dpp.pfInfo.setAddr(pf_addr);
+            /* no need trigger virtual addr for DMP */
+            dpp.pfInfo.setPC(rt_ent.target_pc); // setting target pc
+            dpp.pfInfo.setAddr(pf_addr); // setting target virtual addr
+            // TODO: should set ContextID
 
             /* make translation request and set PREFETCH flag*/
             RequestPtr translation_req = std::make_shared<Request>(
-                pf_addr, blkSize, dpp.pkt->req->getFlags(), requestorId, 
+                pf_addr, blkSize, Request::PREFETCH, requestorId, 
                 rt_ent.target_pc, rt_ent.cID);
-            translation_req->setFlags(Request::PREFETCH);
 
             /* set to-be-translating request, append to pfqMissingTranslation*/
             dpp.setTranslationRequest(translation_req);
             dpp.tc = cache->system->threads[translation_req->contextId()];
+
+            // pf_time will not be set until translation completes
 
             addToQueue(pfqMissingTranslation, dpp);
         }
@@ -584,7 +582,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         // e.g. L1 Prefetch Request access and hit at L2.
         assert(pkt->isRequest());
 
-        if (!pkt->req->isPrefetch()) {
+        // if (!pkt->req->isPrefetch()) {
             // use address in hit pkt to get the whole blkSize data, should be paddr.
             CacheBlk* hit_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
 
@@ -592,15 +590,26 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
             assert(hit_blk && hit_blk->data);
 
             notifyFill(pkt, hit_blk->data);
-        }
+        // }
     }
 
     Queued::notify(pkt, pfi);
 }
+
+void
+DiffMatching::addPfHelper(Stride* s)
+{
+    fatal_if(pf_helper != nullptr, "Only one PfHelper can be registered");
+    pf_helper = s;
+}
+
 void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {
-    Stride::calculatePrefetch(pfi, addresses);
+    // use fake_addresses to drop Stride Prefetch while keep updating pcTables
+    std::vector<AddrPriority> fake_addresses;
+
+    Stride::calculatePrefetch(pfi, fake_addresses);
 }
 
 } // namespace prefetch

@@ -117,6 +117,19 @@ Stride::allocateNewContext(int context)
     return &(insertion_result.first->second);
 }
 
+bool
+Stride::checkStride(Addr addr) const
+{
+    for (auto it = pcTables.begin(); it != pcTables.end(); ++it) {
+        StrideEntry* entry = it->second.findEntry(addr, false);
+
+        if (entry && entry->confidence.calcSaturation() >= threshConf) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void
 Stride::calculatePrefetch(const PrefetchInfo &pfi,
                                     std::vector<AddrPriority> &addresses)

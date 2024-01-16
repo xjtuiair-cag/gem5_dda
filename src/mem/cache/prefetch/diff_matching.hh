@@ -241,6 +241,9 @@ class DiffMatching : public Stride
 
     std::vector<Addr> dmp_stats_pc;
 
+    // A StridePrefetcher which helps DMP detection.
+    Stride* pf_helper;
+
     /** DMP functions */
 
   protected:
@@ -261,6 +264,8 @@ class DiffMatching : public Stride
     void notifyL1Req(const PacketPtr &pkt) override;
     // Probe DataResp from L1 for prefetch detection
     void notifyL1Resp(const PacketPtr &pkt) override;
+
+    void addPfHelper(Stride* s);
 
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;

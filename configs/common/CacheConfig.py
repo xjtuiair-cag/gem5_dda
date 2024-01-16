@@ -285,6 +285,8 @@ def config_cache(options, system):
             if options.l2_hwp_type == "DiffMatchingPrefetcher":
                 system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2)
                 # system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
+                if options.l1d_hwp_type == "StridePrefetcher":
+                    system.l2.prefetcher.set_pf_helper(system.cpu[i].dcache.prefetcher)
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)

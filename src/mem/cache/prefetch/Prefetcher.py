@@ -702,6 +702,7 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     type = 'DiffMatchingPrefetcher'
     cxx_class = 'gem5::prefetch::DiffMatching'
     cxx_header = "mem/cache/prefetch/diff_matching.hh"
+    cxx_exports = [PyBindMethod("addPfHelper")]
                 
     iddt_ent_num = Param.Unsigned(16, "Number of entries of iddt")
     tadt_ent_num = Param.Unsigned(16, "Number of entries of tadt")
@@ -732,17 +733,28 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         super().__init__(**kwargs)
         self._monitor_simObj = NULL # Demand init by config
         self._trigger_simObj = NULL # Demand init by config
-        # self._tlbs = []
+        self._pf_helper = NULL
     
     def set_probe_obj(self, monitor_simObj, trigger_simObj):
         self._monitor_simObj = monitor_simObj
         self._trigger_simObj = trigger_simObj
 
+    def set_pf_helper(self, _simObj):
+        self._pf_helper = _simObj
+
     # Override BasePrefetcher::regProbeListeners
     # Register L1 request and response probelisteners
     def regProbeListeners(self):
+        # Add TLB 
         for tlb in self._tlbs:
             self.getCCObject().addTLB(tlb.getCCObject())
+        
+        # Add PfHelper
+        if self._pf_helper:
+            self.getCCObject().addPfHelper(self._pf_helper.getCCObject())
+        else:
+            print("No valid pf_helper!")
+        
 
         # Add Trigger ProbeListener
         self.getCCObject().addEventProbe(
