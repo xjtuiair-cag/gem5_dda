@@ -185,6 +185,10 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     ADD_STAT(pfLate, statistics::units::Count::get(),
         "number of late prefetches (hitting in cache, MSHR or WB)"),
     ADD_STAT(pfLatePerPC, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLateRate, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLateRatePerPC, statistics::units::Count::get(),
         "number of late prefetches (hitting in cache, MSHR or WB)")
 {
     using namespace statistics;
@@ -198,6 +202,9 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     coverage = pfUseful / (pfUseful + demandMshrMisses);
 
     pfLate = pfHitInCache + pfHitInMSHR + pfHitInWB;
+
+    pfLateRate.flags(nozero | nonan);
+    pfLateRate = pfLate / pfIssued;
 
     accuracy.flags(total | nonan);
     accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
@@ -245,6 +252,8 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     pfLatePerPC.flags(total | nozero | nonan);
     pfLatePerPC = pfHitInCachePerPC + pfHitInMSHRPerPC + pfHitInWBPerPC;
 
+    pfLateRatePerPC.flags(nozero | nonan);
+    pfLateRatePerPC = pfLatePerPC / pfIssuedPerPC;
 }
 
 void 
@@ -273,6 +282,7 @@ Base::StatGroup::regStatsPerPC(const std::vector<Addr> &stats_pc_list)
         timely_accuracy_perPC.subname(i, pc_name);
         coveragePerPC.subname(i, pc_name);
         pfLatePerPC.subname(i, pc_name);
+        pfLateRatePerPC.subname(i, pc_name);
     }
 }
 

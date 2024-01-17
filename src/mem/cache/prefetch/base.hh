@@ -391,6 +391,9 @@ class Base : public ClockedObject
          * (hit in cache, MSHR, WB). */
         statistics::Formula pfLate;
         statistics::Formula pfLatePerPC;
+
+        statistics::Formula pfLateRate;
+        statistics::Formula pfLateRatePerPC;
     } prefetchStats;
 
     std::vector<Addr> stats_pc_list;
