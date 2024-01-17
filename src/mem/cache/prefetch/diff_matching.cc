@@ -228,6 +228,9 @@ DiffMatching::insertRTE(
             new_range_type = pf_helper->checkStride(new_index_pc);
         } else {
             new_range_type = this->checkStride(new_index_pc);
+
+            // tmp: only for test
+            //new_range_type = true;
         }
 
         if (new_range_type == true) break; 
@@ -606,10 +609,14 @@ DiffMatching::addPfHelper(Stride* s)
 void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {
-    // use fake_addresses to drop Stride Prefetch while keep updating pcTables
-    std::vector<AddrPriority> fake_addresses;
+    if (pf_helper) {
+        // use fake_addresses to drop Stride Prefetch while keep updating pcTables
+        std::vector<AddrPriority> fake_addresses;
 
-    Stride::calculatePrefetch(pfi, fake_addresses);
+        Stride::calculatePrefetch(pfi, fake_addresses);
+    } else {
+        Stride::calculatePrefetch(pfi, addresses);
+    }
 }
 
 } // namespace prefetch

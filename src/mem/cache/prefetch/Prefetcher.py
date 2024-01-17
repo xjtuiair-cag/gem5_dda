@@ -733,14 +733,16 @@ class DiffMatchingPrefetcher(StridePrefetcher):
         super().__init__(**kwargs)
         self._monitor_simObj = NULL # Demand init by config
         self._trigger_simObj = NULL # Demand init by config
-        self._pf_helper = NULL
+        self._pf_helper = []
     
     def set_probe_obj(self, monitor_simObj, trigger_simObj):
         self._monitor_simObj = monitor_simObj
         self._trigger_simObj = trigger_simObj
 
-    def set_pf_helper(self, _simObj):
-        self._pf_helper = _simObj
+    def set_pf_helper(self, simObj):
+        if not isinstance(simObj, SimObject):
+            raise TypeError("argument must be a SimObject type")
+        self._pf_helper.append(simObj)
 
     # Override BasePrefetcher::regProbeListeners
     # Register L1 request and response probelisteners
@@ -750,10 +752,8 @@ class DiffMatchingPrefetcher(StridePrefetcher):
             self.getCCObject().addTLB(tlb.getCCObject())
         
         # Add PfHelper
-        if self._pf_helper:
-            self.getCCObject().addPfHelper(self._pf_helper.getCCObject())
-        else:
-            print("No valid pf_helper!")
+        for pf_helper in self._pf_helper:
+            self.getCCObject().addPfHelper(pf_helper.getCCObject())
         
 
         # Add Trigger ProbeListener
