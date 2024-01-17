@@ -76,8 +76,8 @@ class DiffMatching : public Stride
             if (cID_in != cID) return;
 
             if (ready) {
-                diff_ptr = (diff_ptr+1) % diff_size;
                 diff[diff_ptr] = last_in - last;
+                diff_ptr = (diff_ptr+1) % diff_size;
             } else {
                 diff.push_back(last_in - last);
                 if (diff.size() == diff_size) ready = true;
@@ -125,7 +125,7 @@ class DiffMatching : public Stride
     struct RangeTableEntry
     {
         Addr target_PC; // range base on req address
-        Addr cur_tail;
+        Addr cur_tail[3];
         int cur_count;
         ContextID cID;
 
@@ -140,9 +140,9 @@ class DiffMatching : public Stride
       public:
         RangeTableEntry(
                 Addr target_PC, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_PC(target_PC), cur_tail(req_addr), cur_count(0), cID(0),
-                shift_times(shift_times), range_quant_unit(rqu), range_quant_level(rql), 
-                sample_count(rql, 0) {}
+            ) : target_PC(target_PC), cur_tail{req_addr, MaxAddr, MaxAddr}, 
+                cur_count(0), cID(0), shift_times(shift_times), range_quant_unit(rqu), 
+                range_quant_level(rql), sample_count(rql, 0) {}
 
         bool updateSample(Addr addr_in); 
         

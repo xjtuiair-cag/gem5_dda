@@ -266,12 +266,24 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
 {
     // assert(target_PC == PC_in);
 
-    // continuity check
     Addr addr_shifted = addr_in >> shift_times;
 
-    if (addr_shifted == cur_tail + 1) {
+    // repeation check
+    if ((addr_shifted == cur_tail[0]) ||
+        (addr_shifted == cur_tail[1]) ||
+        (addr_shifted == cur_tail[2]) ) 
+    {
+        return false;
+    } 
+    
+    // continuity check
+    if (addr_shifted == cur_tail[0] + 1) {
         cur_count++;
-        cur_tail = addr_shifted;
+
+        cur_tail[2] = cur_tail[1];
+        cur_tail[1] = cur_tail[0];
+        cur_tail[0] = addr_shifted;
+
         return false;
     } 
 
@@ -288,7 +300,10 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
         cur_count = 0;
     }
 
-    cur_tail = addr_shifted;
+    cur_tail[2] = cur_tail[1];
+    cur_tail[1] = cur_tail[0];
+    cur_tail[0] = addr_shifted;
+
     return true;
 }
 
@@ -311,7 +326,7 @@ DiffMatching::rangeFilter(Addr PC_in, Addr addr_in, ContextID cID_in)
         if (range_ent->target_PC != PC_in || range_ent->cID != cID_in) continue;
 
         DPRINTF(DMP, "updateSample: PC %llx addr %llx cur_tail %llx\n", 
-                    PC_in, addr_in, range_ent->cur_tail);
+                    PC_in, addr_in, range_ent->cur_tail[0]);
         bool update_ret = range_ent->updateSample(addr_in);
         ret = ret && update_ret;
     }
@@ -338,9 +353,6 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         if (target_pc != pkt->req->getPC() || !tadt_ent.isValid()) continue;
         assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
-        // repeation check
-        if (tadt_ent.getLast() == req_addr) continue;
-
         // range check
         if (!rangeFilter(target_pc, req_addr, 
                         pkt->req->hasContextId() ? pkt->req->contextId() : 0))
@@ -361,6 +373,7 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
 
         // try matching
         if (tadt_ent.isReady()) {
+            DPRINTF(DMP, "try diffMatching for target PC: %llx\n", target_pc);
             diffMatching(tadt_ent);
         }
     }
@@ -406,7 +419,7 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
             std::memcpy(&new_data, &resp_data, sizeof(int64_t));
 
             // repeation check
-            if (iddt_ent.getLast() == new_data) continue;
+            // if (iddt_ent.getLast() == new_data) continue;
 
             DPRINTF(DMP, "notifyL1Resp: [filter pass] PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
                                 pkt->req->getPC(), pkt->req->getPaddr(), 
