@@ -216,25 +216,31 @@ DiffMatching::insertRTE(
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
 
     // get indexPC Range type, only matter when current indexPC as other pattern's target
-    bool new_range_type = false;
-    for (auto range_ent : rangeTable) {
-        if (range_ent->target_PC != new_index_pc || range_ent->cID != cID) continue;
+    bool new_range_type;
 
-        new_range_type = new_range_type || range_ent->getRangeType();
-        
-        // Stride PC also should be classified as Range
-        // search for all requestor
-        if(pf_helper) {
-            new_range_type = pf_helper->checkStride(new_index_pc);
-        } else {
-            new_range_type = this->checkStride(new_index_pc);
+    // Stride PC also should be classified as Range
+    // search for all requestor
+    if(pf_helper) {
+        new_range_type = pf_helper->checkStride(new_index_pc);
+    } else {
+        new_range_type = this->checkStride(new_index_pc);
 
-            // tmp: only for test
-            //new_range_type = true;
-        }
+        // tmp: only for test
+        //new_range_type = true;
+    }
 
-        if (new_range_type == true) break; 
-    } 
+    if (!new_range_type) {
+
+        // check rangeTable for range type
+        for (auto range_ent : rangeTable) {
+            if (range_ent->target_PC != new_index_pc || range_ent->cID != cID) continue;
+
+            new_range_type = new_range_type || range_ent->getRangeType();
+            
+            if (new_range_type == true) break; 
+        } 
+
+    }
 
     DPRINTF(DMP, "Insert RelationTable: "
         "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d \n",
