@@ -292,6 +292,7 @@ def config_cache(options, system):
                     system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+                system.l2.prefetcher.range_ahead_dist = getattr(options, "dmp_range_ahead_dist", 0)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
                 system.l2.prefetcher.queue_size = 1024*1024*16
                 system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
