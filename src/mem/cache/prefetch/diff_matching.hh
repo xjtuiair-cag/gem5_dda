@@ -33,6 +33,7 @@ class DiffMatching : public Stride
     const int rt_ent_num;
 
     // indirect range prefetch length
+    int range_ahead_dist;
     int indir_range;
 
     // possiable shift values
@@ -256,7 +257,7 @@ class DiffMatching : public Stride
 
     // Base notify for Cache access (Hit or Miss)
     void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) override;
-    
+
     // Probe DataResp from Memory for prefetch generation
     void notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr) override;
 
@@ -264,6 +265,8 @@ class DiffMatching : public Stride
     void notifyL1Req(const PacketPtr &pkt) override;
     // Probe DataResp from L1 for prefetch detection
     void notifyL1Resp(const PacketPtr &pkt) override;
+
+    void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID);
 
     void addPfHelper(Stride* s);
 

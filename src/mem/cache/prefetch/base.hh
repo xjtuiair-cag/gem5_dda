@@ -355,6 +355,8 @@ class Base : public ClockedObject
 
         statistics::Scalar demandMshrMisses;
         statistics::Vector demandMshrMissesPerPC;
+        statistics::Scalar demandMshrHitsAtPf;
+        statistics::Vector demandMshrHitsAtPfPerPC;
         statistics::Scalar pfIssued;
         statistics::Vector pfIssuedPerPC;
         /** The number of times a HW-prefetched block is evicted w/o
@@ -367,12 +369,22 @@ class Base : public ClockedObject
         /** The number of times there is a hit on prefetch but cache block
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
-        statistics::Formula accuracy;
-        statistics::Formula accuracyPerPC;
-        statistics::Formula timely_accuracy;
-        statistics::Formula timely_accuracy_perPC;
-        statistics::Formula coverage;
-        statistics::Formula coveragePerPC;
+        // statistics::Formula accuracy;
+        // statistics::Formula accuracyPerPC;
+        // statistics::Formula timely_accuracy;
+        // statistics::Formula timely_accuracy_perPC;
+        // statistics::Formula coverage;
+        // statistics::Formula coveragePerPC;
+        statistics::Formula coverage_cosumed;
+        statistics::Formula coverage_cosumed_perPC;
+        statistics::Formula coverage_effective;
+        statistics::Formula coverage_effective_perPC;
+        statistics::Formula coverage_timely;
+        statistics::Formula coverage_timely_perPC;
+        statistics::Formula accuracy_cache;
+        statistics::Formula accuracy_cache_perPC;
+        statistics::Formula accuracy_prefetcher;
+        statistics::Formula accuracy_prefetcher_perPC;
 
         /** The number of times a HW-prefetch hits in cache. */
         statistics::Scalar pfHitInCache;
@@ -446,8 +458,22 @@ class Base : public ClockedObject
         }
     }
 
+    void incrDemandMshrHitsAtPf(Addr pc)
+    {
+        prefetchStats.demandMshrHitsAtPf++;
+
+        if (pc != MaxAddr) {
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (pc == stats_pc_list[i]) {
+                    prefetchStats.demandMshrHitsAtPfPerPC[i]++;
+                    break;
+                }
+            }
+        }
+    }
+
     void
-    incrDemandMhsrMisses(PacketPtr pkt)
+    incrDemandMshrMisses(PacketPtr pkt)
     {
         prefetchStats.demandMshrMisses++;
 

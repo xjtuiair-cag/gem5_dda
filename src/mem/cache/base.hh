@@ -1040,6 +1040,9 @@ class BaseCache : public ClockedObject
         /** Number of misses that hit in the MSHRs per command and thread. */
         statistics::Vector mshrHits;
         statistics::Vector mshrHitsPerPC;
+        /** Number of MSHR Hit which was allocated by prefetch*/
+        statistics::Vector mshrHitsAtPf;
+        statistics::Vector mshrHitsAtPfPerPC;
         /** Number of misses that miss in the MSHRs, per command and thread. */
         statistics::Vector mshrMisses;
         statistics::Vector mshrMissesPerPC;
@@ -1124,6 +1127,10 @@ class BaseCache : public ClockedObject
         statistics::Formula demandMshrHitsPerPC;
         /** Total number of misses that hit in the MSHRs. */
         statistics::Formula overallMshrHits;
+
+        /** Number of MSHR Hit which was allocated by prefetch*/
+        statistics::Formula demandMshrHitsAtPf;
+        statistics::Formula demandMshrHitsAtPfPerPC;
 
         /** Demand misses that miss in the MSHRs. */
         statistics::Formula demandMshrMisses;

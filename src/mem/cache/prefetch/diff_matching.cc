@@ -18,6 +18,7 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     iddt_ent_num(p.iddt_ent_num),
     tadt_ent_num(p.tadt_ent_num),
     rt_ent_num(p.rt_ent_num),
+    range_ahead_dist(p.range_ahead_dist),
     indir_range(p.indir_range),
     iddt_diff_num(p.iddt_diff_num),
     tadt_diff_num(p.tadt_diff_num),
@@ -493,7 +494,6 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
         /* Assume response data is a int and always occupies 4 bytes */
         const int data_stride = 4;
         const int byte_width = 8;
-        const int32_t priority = 0;
 
         /* set range_end, only process one data if not range type */
         unsigned range_end;
@@ -520,56 +520,71 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
                     "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
 
-            /** get a fake pfi, generator pc is target_pc for chain-trigger */
-            PrefetchInfo fake_pfi(pf_addr, rt_ent.target_pc, requestorId);
+            // insert to missing translation queue
+            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID);
             
-            statsDMP.dmp_pfIdentified++;
-            for (int i = 0; i < dmp_stats_pc.size(); i++) {
-                if (rt_ent.target_pc == dmp_stats_pc[i]) {
-                    statsDMP.dmp_pfIdentifiedPerPC[i]++;
-                    break;
+            if (rt_ent.target_pc == 0x400ca0) {
+                for (int i = 1; i <= range_ahead_dist; i++) {
+                    insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID);
                 }
             }
-
-            /* filter repeat request */
-            if (queueFilter) {
-                if (alreadyInQueue(pfq, fake_pfi, priority)) {
-                    /* repeat address in pfi */
-                    continue;
-                }
-                if (alreadyInQueue(pfqMissingTranslation, fake_pfi, priority)) {
-                    /* repeat address in pfi */
-                    continue;
-                }
-            }
-
-            /* create pkt and req for dpp, fake for later translation*/
-            DeferredPacket dpp(this, fake_pfi, 0, priority);
-
-            /* no need trigger virtual addr for DMP */
-            dpp.pfInfo.setPC(rt_ent.target_pc); // setting target pc
-            dpp.pfInfo.setAddr(pf_addr); // setting target virtual addr
-            // TODO: should set ContextID
-
-            /* make translation request and set PREFETCH flag*/
-            RequestPtr translation_req = std::make_shared<Request>(
-                pf_addr, blkSize, Request::PREFETCH, requestorId, 
-                rt_ent.target_pc, rt_ent.cID);
-
-            /* set to-be-translating request, append to pfqMissingTranslation*/
-            dpp.setTranslationRequest(translation_req);
-            dpp.tc = cache->system->threads[translation_req->contextId()];
-
-            // pf_time will not be set until translation completes
-
-            addToQueue(pfqMissingTranslation, dpp);
         }
 
         // try to do translation immediately
         processMissingTranslations(queueSize - pfq.size());
-
-        statsDMP.dmp_dataFill++;
     }
+
+    statsDMP.dmp_dataFill++;
+}
+
+void 
+DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID)
+{
+    /** get a fake pfi, generator pc is target_pc for chain-trigger */
+    PrefetchInfo fake_pfi(pf_addr, target_pc, requestorId);
+    
+    statsDMP.dmp_pfIdentified++;
+    for (int i = 0; i < dmp_stats_pc.size(); i++) {
+        if (target_pc == dmp_stats_pc[i]) {
+            statsDMP.dmp_pfIdentifiedPerPC[i]++;
+            break;
+        }
+    }
+
+    const int32_t priority = 0;
+
+    /* filter repeat request */
+    if (queueFilter) {
+        if (alreadyInQueue(pfq, fake_pfi, priority)) {
+            /* repeat address in pfi */
+            return;
+        }
+        if (alreadyInQueue(pfqMissingTranslation, fake_pfi, priority)) {
+            /* repeat address in pfi */
+            return;
+        }
+    }
+
+    /* create pkt and req for dpp, fake for later translation*/
+    DeferredPacket dpp(this, fake_pfi, 0, priority);
+
+    /* no need trigger virtual addr for DMP */
+    dpp.pfInfo.setPC(target_pc); // setting target pc
+    dpp.pfInfo.setAddr(pf_addr); // setting target virtual addr
+    // TODO: should set ContextID
+
+    /* make translation request and set PREFETCH flag*/
+    RequestPtr translation_req = std::make_shared<Request>(
+        pf_addr, blkSize, Request::PREFETCH, requestorId, 
+        target_pc, cID);
+
+    /* set to-be-translating request, append to pfqMissingTranslation*/
+    dpp.setTranslationRequest(translation_req);
+    dpp.tc = cache->system->threads[translation_req->contextId()];
+
+    // pf_time will not be set until translation completes
+
+    addToQueue(pfqMissingTranslation, dpp);
 }
 
 void
