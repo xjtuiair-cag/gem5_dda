@@ -86,7 +86,7 @@ DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
     : statistics::Group(parent),
     ADD_STAT(dmp_pfIdentified, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified"),
-    ADD_STAT(dmp_pfIdentifiedPerPC, statistics::units::Count::get(),
+    ADD_STAT(dmp_pfIdentifiedPerPfPC, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified"),
     ADD_STAT(dmp_noValidDataPerPC, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified"),
@@ -97,7 +97,7 @@ DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
     
     int max_per_pc = 32;
 
-    dmp_pfIdentifiedPerPC 
+    dmp_pfIdentifiedPerPfPC 
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
@@ -121,7 +121,7 @@ DiffMatching::DMPStats::regStatsPerPC(const std::vector<Addr>& stats_pc_list)
         stream << std::hex << stats_pc_list[i];
         std::string pc_name = stream.str();
 
-        dmp_pfIdentifiedPerPC.subname(i, pc_name);
+        dmp_pfIdentifiedPerPfPC.subname(i, pc_name);
         dmp_noValidDataPerPC.subname(i, pc_name);
     }
 }
@@ -546,7 +546,7 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
     statsDMP.dmp_pfIdentified++;
     for (int i = 0; i < dmp_stats_pc.size(); i++) {
         if (target_pc == dmp_stats_pc[i]) {
-            statsDMP.dmp_pfIdentifiedPerPC[i]++;
+            statsDMP.dmp_pfIdentifiedPerPfPC[i]++;
             break;
         }
     }
@@ -590,45 +590,60 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
 void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
-    if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-        for (auto& rt_ent: relationTable) { 
-            if (rt_ent.index_pc == pkt->req->getPC())
-            {
-                rt_ent.cID = pkt->req->contextId();
-            }
-        }
-        // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
-    }
+    // if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+    //     for (auto& rt_ent: relationTable) { 
+    //         if (rt_ent.index_pc == pkt->req->getPC())
+    //         {
+    //             rt_ent.cID = pkt->req->contextId();
+    //         }
+    //     }
+    //     // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
+    // }
+
+    assert(pkt->isRequest());
     
-    if (pfi.isCacheMiss()) {
-        // Miss
-        DPRINTF(HWPrefetch, "notify::CacheMiss: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
-                            pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
-                            pkt->getAddr(), 
-                            pkt->req->getPaddr(), 
-                            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
-    } else {
-        // Hit
-        DPRINTF(HWPrefetch, "notify::CacheHit: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
-                            pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
-                            pkt->getAddr(), 
-                            pkt->req->getPaddr(), 
-                            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
-
-        // TODO: Should we do further prefetch for high level cache prefetch ?
-        // e.g. L1 Prefetch Request access and hit at L2.
-        assert(pkt->isRequest());
-
-        // if (!pkt->req->isPrefetch()) {
-            // use address in hit pkt to get the whole blkSize data, should be paddr.
-            CacheBlk* hit_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
-
-            // always hit when you get here.
-            assert(hit_blk && hit_blk->data);
-
-            notifyFill(pkt, hit_blk->data);
-        // }
+    if (debug::HWPrefetch) {
+        if (pfi.isCacheMiss()) {
+            // Miss
+            DPRINTF(HWPrefetch, "notify::CacheMiss: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
+                                pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
+                                pkt->getAddr(), 
+                                pkt->req->getPaddr(), 
+                                pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
+        } else {
+            // Hit
+            DPRINTF(HWPrefetch, "notify::CacheHit: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
+                                pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
+                                pkt->getAddr(), 
+                                pkt->req->getPaddr(), 
+                                pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
+        }
     }
+
+    // TODO: Should we do further prefetch for high level cache prefetch ?
+    // e.g. L1 Prefetch Request access and hit at L2.
+    // currently L1 HWPrefetch Request will be translated to ReadShared request at L2.
+
+    if (!pkt->req->isPrefetch()) {
+        // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
+        // When this called by ppHit->notify(), we use cache blk data to prefetch.
+        CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+        // assert(try_cache_blk && try_cache_blk->data);
+
+        if (try_cache_blk != nullptr && try_cache_blk->data) {
+            notifyFill(pkt, try_cache_blk->data);
+        }
+    }
+
+        // CacheBlk* try_miss_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+        // if (try_miss_blk != nullptr) {
+        //     assert(try_miss_blk && try_miss_blk->data);
+        //     notifyFill(pkt, try_miss_blk->data);
+
+        //     DPRINTF(HWPrefetch, "notify:: Hit at prefetcher's cache, try DMP prefetch.\n");
+        // }
 
     Queued::notify(pkt, pfi);
 }

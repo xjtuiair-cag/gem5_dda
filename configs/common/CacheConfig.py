@@ -212,7 +212,9 @@ def config_cache(options, system):
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
 
             if options.l1d_hwp_type == "DiffMatchingPrefetcher":
-                system.cpu[i].dcache.prefetcher.set_probe_obj(system.cpu[i].dcache, system.cpu[i].dcache)
+                system.cpu[i].dcache.prefetcher.set_probe_obj(
+                    system.cpu[i].dcache, system.cpu[i].dcache, system.cpu[i].dcache
+                )
 
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
                 system.cpu[i].dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
@@ -284,7 +286,10 @@ def config_cache(options, system):
                 system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
             if options.l2_hwp_type == "DiffMatchingPrefetcher":
-                system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2)
+                system.l2.prefetcher.set_probe_obj(
+                    system.cpu[i].dcache, system.cpu[i].dcache, system.l2
+                )
+                #system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2, system.l2)
                 if options.l1d_hwp_type == "StridePrefetcher":
                     print("Add L1 StridePrefetcher as L2 DMP helper.")
                     system.l2.prefetcher.set_pf_helper(system.cpu[i].dcache.prefetcher)

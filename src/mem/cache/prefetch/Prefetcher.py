@@ -735,12 +735,14 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._monitor_simObj = NULL # Demand init by config
-        self._trigger_simObj = NULL # Demand init by config
+        self._access_simObj = NULL # Demand init by config
+        self._fill_simObj = NULL # Demand init by config
         self._pf_helper = []
     
-    def set_probe_obj(self, monitor_simObj, trigger_simObj):
+    def set_probe_obj(self, monitor_simObj, access_simObj, fill_simObj):
         self._monitor_simObj = monitor_simObj
-        self._trigger_simObj = trigger_simObj
+        self._access_simObj = access_simObj
+        self._fill_simObj = fill_simObj
 
     def set_pf_helper(self, simObj):
         if not isinstance(simObj, SimObject):
@@ -761,13 +763,13 @@ class DiffMatchingPrefetcher(StridePrefetcher):
 
         # Add Trigger ProbeListener
         self.getCCObject().addEventProbe(
-            self._trigger_simObj.getCCObject(), "Miss", False, True, False, False
+            self._access_simObj.getCCObject(), "Miss", False, True, False, False
         ) 
         self.getCCObject().addEventProbe(
-            self._trigger_simObj.getCCObject(), "Fill", True, False, False, False
+            self._fill_simObj.getCCObject(), "Fill", True, False, False, False
         ) 
         self.getCCObject().addEventProbe(
-            self._trigger_simObj.getCCObject(), "Hit", False, False, False, False
+            self._access_simObj.getCCObject(), "Hit", False, False, False, False
         ) 
 
         # Add Monitor ProbeListener

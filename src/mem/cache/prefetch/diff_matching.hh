@@ -234,7 +234,7 @@ class DiffMatching : public Stride
 
         // STATS
         statistics::Scalar dmp_pfIdentified;
-        statistics::Vector dmp_pfIdentifiedPerPC;
+        statistics::Vector dmp_pfIdentifiedPerPfPC;
         statistics::Scalar dmp_noValidData;
         statistics::Vector dmp_noValidDataPerPC;
         statistics::Scalar dmp_dataFill;
