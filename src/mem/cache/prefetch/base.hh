@@ -167,6 +167,7 @@ class Base : public ClockedObject
         void setPC(Addr pc_in)
         {
             pc = pc_in;
+            validPC = true;
         }
 
         /**

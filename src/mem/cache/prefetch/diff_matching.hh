@@ -189,14 +189,17 @@ class DiffMatching : public Stride
         bool range;
         int range_degree;
         ContextID cID;
+        int32_t priority;
         Tick birth_time;
 
         // manually allocate
         RTEntry(
             Addr index_pc, Addr target_pc, Addr target_base_addr, 
-            unsigned int shift, bool range, int range_degree, ContextID cID
+            unsigned int shift, bool range, int range_degree, 
+            ContextID cID, int32_t priority
         ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
-            shift(shift), range(range), range_degree(range_degree), cID(cID)
+            shift(shift), range(range), range_degree(range_degree), cID(cID), 
+            priority(priority)
         { birth_time = curTick(); }
 
         RTEntry* update(const RTEntry& new_entry)
@@ -208,6 +211,7 @@ class DiffMatching : public Stride
             range = new_entry.range;
             range_degree = new_entry.range_degree;
             cID = new_entry.cID;
+            priority = new_entry.priority;
             birth_time = new_entry.birth_time;
             
             return this;
@@ -224,6 +228,8 @@ class DiffMatching : public Stride
         const iddt_ent_t& iddt_ent_match, const tadt_ent_t& tadt_ent_match,
         int iddt_match_point, unsigned int shift, ContextID cID
     );
+
+    int32_t getPriority(Addr target_pc, ContextID cID);
 
 
     /** DMP specific stats */
@@ -266,7 +272,8 @@ class DiffMatching : public Stride
     // Probe DataResp from L1 for prefetch detection
     void notifyL1Resp(const PacketPtr &pkt) override;
 
-    void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID);
+    void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, 
+                                ContextID cID, int32_t priority);
 
     void addPfHelper(Stride* s);
 

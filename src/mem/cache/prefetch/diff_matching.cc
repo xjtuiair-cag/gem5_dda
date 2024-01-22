@@ -243,9 +243,11 @@ DiffMatching::insertRTE(
 
     }
 
+    int32_t priority = getPriority(new_index_pc, cID) + 1;
+
     DPRINTF(DMP, "Insert RelationTable: "
-        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d \n",
-        new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type
+        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d priority %d\n",
+        new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type, priority
     );
 
     RTEntry new_rte (
@@ -255,7 +257,8 @@ DiffMatching::insertRTE(
         shift,
         new_range_type, 
         indir_range, // TODO: dynamic detection
-        cID
+        cID,
+        priority
     );
 
     if (relationTable.size() < rt_ent_num) {
@@ -266,6 +269,24 @@ DiffMatching::insertRTE(
         rt_ptr = (rt_ptr+1) % rt_ent_num;
         return brand_new_ent;
     }
+}
+
+int32_t
+DiffMatching::getPriority(Addr pc_in, ContextID cID_in)
+{
+    int32_t priority = 0;
+    for (auto& rt_ent : relationTable) {
+        // if (!rt_ent.valid()) continue;
+
+        if (rt_ent.target_pc != pc_in) continue;
+
+        if (cID_in != -1 && rt_ent.cID != cID_in) continue;
+
+        priority = rt_ent.priority;
+        break;
+    }
+
+    return priority;
 }
 
 bool
@@ -521,11 +542,11 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
 
             // insert to missing translation queue
-            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID);
+            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
             
             if (rt_ent.target_pc == 0x400ca0) {
                 for (int i = 1; i <= range_ahead_dist; i++) {
-                    insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID);
+                    insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
                 }
             }
         }
@@ -538,7 +559,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
 }
 
 void 
-DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID)
+DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID, int32_t priority)
 {
     /** get a fake pfi, generator pc is target_pc for chain-trigger */
     PrefetchInfo fake_pfi(pf_addr, target_pc, requestorId);
@@ -550,8 +571,6 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
             break;
         }
     }
-
-    const int32_t priority = 0;
 
     /* filter repeat request */
     if (queueFilter) {
@@ -665,6 +684,17 @@ DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriorit
         Stride::calculatePrefetch(pfi, fake_addresses);
     } else {
         Stride::calculatePrefetch(pfi, addresses);
+    }
+
+    // set priority for stride prefetch
+    // in case the stride pc is the same as rt_ent's target pc
+    int32_t priority = 0;
+    if (pfi.hasPC()) {
+        priority = getPriority(pfi.getPC(), -1);
+    }
+
+    for (auto& addr : addresses) {
+        addr.second = priority;
     }
 }
 
