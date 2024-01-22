@@ -181,8 +181,10 @@ class O3_ARM_v7a_DCache(Cache):
     tag_latency = 2
     data_latency = 2
     response_latency = 2
-    mshrs = 6
-    tgts_per_mshr = 8
+    #mshrs = 6
+    #tgts_per_mshr = 8
+    mshrs = 32
+    tgts_per_mshr = 16
     size = "32kB"
     assoc = 2
     write_buffers = 16
@@ -195,8 +197,10 @@ class O3_ARM_v7aL2(Cache):
     tag_latency = 12
     data_latency = 12
     response_latency = 12
-    mshrs = 16
-    tgts_per_mshr = 8
+    #mshrs = 16
+    #tgts_per_mshr = 8
+    mshrs = 64
+    tgts_per_mshr = 16
     size = "256kB"
     assoc = 8
     write_buffers = 8
