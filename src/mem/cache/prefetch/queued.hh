@@ -185,17 +185,17 @@ class Queued : public Base
         // STATS
         statistics::Scalar pfIdentified;
         statistics::Scalar pfBufferHit;
-        statistics::Vector pfBufferHitPerPC;
+        statistics::Vector pfBufferHitPerPfPC;
         statistics::Scalar pfInCache;
-        statistics::Vector pfInCachePerPC;
+        statistics::Vector pfInCachePerPfPC;
         statistics::Scalar pfRemovedDemand;
-        statistics::Vector pfRemovedDemandPerPC;
+        statistics::Vector pfRemovedDemandPerPfPC;
         statistics::Scalar pfRemovedFull;
-        statistics::Vector pfRemovedFullPerPC;
+        statistics::Vector pfRemovedFullPerPfPC;
         statistics::Scalar pfSpanPage;
         statistics::Scalar pfUsefulSpanPage;
         statistics::Scalar pfTransFailed;
-        statistics::Vector pfTransFailedPerPC;
+        statistics::Vector pfTransFailedPerPfPC;
     } statsQueued;
   public:
     using AddrPriority = std::pair<Addr, int32_t>;

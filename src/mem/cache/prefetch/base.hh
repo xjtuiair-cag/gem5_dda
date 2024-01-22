@@ -356,56 +356,56 @@ class Base : public ClockedObject
         statistics::Scalar demandMshrMisses;
         statistics::Vector demandMshrMissesPerPC;
         statistics::Scalar demandMshrHitsAtPf;
-        statistics::Vector demandMshrHitsAtPfPerPC;
+        statistics::Vector demandMshrHitsAtPfPerPfPC;
         statistics::Scalar pfIssued;
-        statistics::Vector pfIssuedPerPC;
+        statistics::Vector pfIssuedPerPfPC;
         /** The number of times a HW-prefetched block is evicted w/o
          * reference. */
         statistics::Scalar pfUnused;
-        statistics::Vector pfUnusedPerPC;
+        statistics::Vector pfUnusedPerPfPC;
         /** The number of times a HW-prefetch is useful. */
         statistics::Scalar pfUseful;
-        statistics::Vector pfUsefulPerPC;
+        statistics::Vector pfUsefulPerPfPC;
         /** The number of times there is a hit on prefetch but cache block
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
         // statistics::Formula accuracy;
         // statistics::Formula accuracyPerPC;
         // statistics::Formula timely_accuracy;
-        // statistics::Formula timely_accuracy_perPC;
+        // statistics::Formula timely_accuracy_perPfPC;
         // statistics::Formula coverage;
         // statistics::Formula coveragePerPC;
         statistics::Formula coverage_cosumed;
-        statistics::Formula coverage_cosumed_perPC;
+        statistics::Formula coverage_cosumed_perPfPC;
         statistics::Formula coverage_effective;
-        statistics::Formula coverage_effective_perPC;
+        statistics::Formula coverage_effective_perPfPC;
         statistics::Formula coverage_timely;
-        statistics::Formula coverage_timely_perPC;
+        statistics::Formula coverage_timely_perPfPC;
         statistics::Formula accuracy_cache;
-        statistics::Formula accuracy_cache_perPC;
+        statistics::Formula accuracy_cache_perPfPC;
         statistics::Formula accuracy_prefetcher;
-        statistics::Formula accuracy_prefetcher_perPC;
+        statistics::Formula accuracy_prefetcher_perPfPC;
 
         /** The number of times a HW-prefetch hits in cache. */
         statistics::Scalar pfHitInCache;
-        statistics::Vector pfHitInCachePerPC;
+        statistics::Vector pfHitInCachePerPfPC;
 
         /** The number of times a HW-prefetch hits in a MSHR. */
         statistics::Scalar pfHitInMSHR;
-        statistics::Vector pfHitInMSHRPerPC;
+        statistics::Vector pfHitInMSHRPerPfPC;
 
         /** The number of times a HW-prefetch hits
          * in the Write Buffer (WB). */
         statistics::Scalar pfHitInWB;
-        statistics::Vector pfHitInWBPerPC;
+        statistics::Vector pfHitInWBPerPfPC;
 
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */
         statistics::Formula pfLate;
-        statistics::Formula pfLatePerPC;
+        statistics::Formula pfLatePerPfPC;
 
         statistics::Formula pfLateRate;
-        statistics::Formula pfLateRatePerPC;
+        statistics::Formula pfLateRatePerPfPC;
     } prefetchStats;
 
     std::vector<Addr> stats_pc_list;
@@ -451,7 +451,7 @@ class Base : public ClockedObject
         if (pc != MaxAddr) {
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (pc == stats_pc_list[i]) {
-                    prefetchStats.pfUnusedPerPC[i]++;
+                    prefetchStats.pfUnusedPerPfPC[i]++;
                     break;
                 }
             }
@@ -465,7 +465,7 @@ class Base : public ClockedObject
         if (pc != MaxAddr) {
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (pc == stats_pc_list[i]) {
-                    prefetchStats.demandMshrHitsAtPfPerPC[i]++;
+                    prefetchStats.demandMshrHitsAtPfPerPfPC[i]++;
                     break;
                 }
             }
@@ -496,7 +496,7 @@ class Base : public ClockedObject
             Addr req_pc = pkt->req->getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    prefetchStats.pfHitInCachePerPC[i]++;
+                    prefetchStats.pfHitInCachePerPfPC[i]++;
                     break;
                 }
             }
@@ -511,7 +511,7 @@ class Base : public ClockedObject
             Addr req_pc = pkt->req->getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    prefetchStats.pfHitInMSHRPerPC[i]++;
+                    prefetchStats.pfHitInMSHRPerPfPC[i]++;
                     break;
                 }
             }
@@ -526,7 +526,7 @@ class Base : public ClockedObject
             Addr req_pc = pkt->req->getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    prefetchStats.pfHitInWBPerPC[i]++;
+                    prefetchStats.pfHitInWBPerPfPC[i]++;
                     break;
                 }
             }

@@ -360,12 +360,10 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
                         && mshr->getNumTargets() == 1) {
 
                         stats.cmdStats(pkt).mshrHitsAtPf[pkt->req->requestorId()]++;
-                        Addr mshr_pc = MaxAddr;
-                        if (first_target->pkt->req->hasPC()) {
-                            // should be counted as the prefetch request pc in mshr
-                            mshr_pc = first_target->pkt->req->getPC();
+                        if (pkt->req->hasPC()) {
                             for (int i = 0; i < stats_pc_list.size(); i++) {
-                                if (mshr_pc == stats_pc_list[i]) {
+                                Addr req_pc = pkt->req->getPC();
+                                if (req_pc == stats_pc_list[i]) {
                                     stats.cmdStats(pkt).mshrHitsAtPfPerPC[i]++;
                                     break;
                                 }
@@ -373,6 +371,9 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
                         }
 
                         if (prefetcher && pkt->isDemand()) {
+                            // should be counted as the prefetch request pc in mshr
+                            Addr mshr_pc = first_target->pkt->req->hasPC() ? 
+                                            first_target->pkt->req->getPC() : MaxAddr;
                             prefetcher->incrDemandMshrHitsAtPf(mshr_pc);
                         }
                         
@@ -2109,6 +2110,10 @@ BaseCache::CacheCmdStats::CacheCmdStats(BaseCache &c,
                ("number of " + name + " hits").c_str()),
       ADD_STAT(hitsPerPC, statistics::units::Count::get(),
                ("number of " + name + " hits").c_str()),
+      ADD_STAT(hitsAtPf, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
+      ADD_STAT(hitsAtPfPerPC, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
       ADD_STAT(misses, statistics::units::Count::get(),
                ("number of " + name + " misses").c_str()),
       ADD_STAT(missesPerPC, statistics::units::Count::get(),
@@ -2177,6 +2182,14 @@ BaseCache::CacheCmdStats::regStatsFromParent()
         ;
     for (int i = 0; i < max_requestors; i++) {
         hits.subname(i, system->getRequestorName(i));
+    }
+
+    hitsAtPf
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        hitsAtPf.subname(i, system->getRequestorName(i));
     }
 
     // Miss statistics
@@ -2306,6 +2319,7 @@ BaseCache::CacheCmdStats::regStatsFromParent()
     // PerPC stats
 
     hitsPerPC.init(max_per_pc).flags(nozero | nonan);
+    hitsAtPfPerPC.init(max_per_pc).flags(nozero | nonan);
     missesPerPC.init(max_per_pc).flags(nozero | nonan);
     mshrHitsPerPC.init(max_per_pc).flags(nozero | nonan);
     mshrHitsAtPfPerPC.init(max_per_pc).flags(nozero | nonan);
@@ -2321,6 +2335,7 @@ BaseCache::CacheCmdStats::regStatsFromParent()
         std::string pc_hex = stream.str();
 
         hitsPerPC.subname(i, pc_hex);
+        hitsAtPfPerPC.subname(i, pc_hex);
         missesPerPC.subname(i, pc_hex);
         accessesPerPC.subname(i, pc_hex);
         mshrHitsPerPC.subname(i, pc_hex);
@@ -2337,6 +2352,10 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
     ADD_STAT(demandHits, statistics::units::Count::get(),
              "number of demand (read+write) hits"),
     ADD_STAT(demandHitsPerPC, statistics::units::Count::get(),
+             "number of demand (read+write) hits"),
+    ADD_STAT(demandHitsAtPf, statistics::units::Count::get(),
+             "number of demand (read+write) hits"),
+    ADD_STAT(demandHitsAtPfPerPC, statistics::units::Count::get(),
              "number of demand (read+write) hits"),
     ADD_STAT(overallHits, statistics::units::Count::get(),
              "number of overall hits"),
@@ -2467,8 +2486,17 @@ BaseCache::CacheStats::regStats()
         demandHits.subname(i, system->getRequestorName(i));
     }
 
+    demandHitsAtPf.flags(total | nozero | nonan);
+    demandHitsAtPf = SUM_DEMAND(hitsAtPf);
+    for (int i = 0; i < max_requestors; i++) {
+        demandHitsAtPf.subname(i, system->getRequestorName(i));
+    }
+
     demandHitsPerPC.flags(total | nozero | nonan);
     demandHitsPerPC = SUM_DEMAND(hitsPerPC);
+
+    demandHitsAtPfPerPC.flags(total | nozero | nonan);
+    demandHitsAtPfPerPC = SUM_DEMAND(hitsAtPfPerPC);
 
     overallHits.flags(total | nozero | nonan);
     overallHits = demandHits + SUM_NON_DEMAND(hits);
@@ -2642,7 +2670,6 @@ BaseCache::CacheStats::regStats()
         overallMshrUncacheable.subname(i, system->getRequestorName(i));
     }
 
-
     overallMshrUncacheableLatency.flags(total | nozero | nonan);
     overallMshrUncacheableLatency =
         SUM_DEMAND(mshrUncacheableLatency) +
@@ -2693,6 +2720,7 @@ BaseCache::CacheStats::regStats()
         std::string pc_hex = stream.str();
 
         demandHitsPerPC.subname(i, pc_hex);
+        demandHitsAtPfPerPC.subname(i, pc_hex);
         demandMissesPerPC.subname(i, pc_hex);
         demandAccessesPerPC.subname(i, pc_hex);
         demandMissRatePerPC.subname(i, pc_hex);

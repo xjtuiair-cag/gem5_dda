@@ -209,7 +209,7 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
                     Addr req_pc = itr->pfInfo.getPC();
                     for (int i = 0; i < stats_pc_list.size(); i++) {
                         if (req_pc == stats_pc_list[i]) {
-                            statsQueued.pfRemovedDemandPerPC[i]++;
+                            statsQueued.pfRemovedDemandPerPfPC[i]++;
                             break;
                         }
                     }
@@ -288,7 +288,7 @@ Queued::getPacket()
         Addr req_pc = pkt->req->getPC();
         for (int i = 0; i < stats_pc_list.size(); i++) {
             if (req_pc == stats_pc_list[i]) {
-                prefetchStats.pfIssuedPerPC[i]++;
+                prefetchStats.pfIssuedPerPfPC[i]++;
                 break;
             }
         }
@@ -307,21 +307,21 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
              "number of prefetch candidates identified"),
     ADD_STAT(pfBufferHit, statistics::units::Count::get(),
              "number of redundant prefetches already in prefetch queue"),
-    ADD_STAT(pfBufferHitPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfBufferHitPerPfPC, statistics::units::Count::get(),
              "number of redundant prefetches already in prefetch queue"),
     ADD_STAT(pfInCache, statistics::units::Count::get(),
              "number of redundant prefetches already in cache/mshr dropped"),
-    ADD_STAT(pfInCachePerPC, statistics::units::Count::get(),
+    ADD_STAT(pfInCachePerPfPC, statistics::units::Count::get(),
              "number of redundant prefetches already in cache/mshr dropped"),
     ADD_STAT(pfRemovedDemand, statistics::units::Count::get(),
              "number of prefetches dropped due to a demand for the same "
              "address"),
-    ADD_STAT(pfRemovedDemandPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfRemovedDemandPerPfPC, statistics::units::Count::get(),
              "number of prefetches dropped due to a demand for the same "
              "address"),
     ADD_STAT(pfRemovedFull, statistics::units::Count::get(),
              "number of prefetches dropped due to prefetch queue size"),
-    ADD_STAT(pfRemovedFullPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfRemovedFullPerPfPC, statistics::units::Count::get(),
              "number of prefetches dropped due to prefetch queue size"),
     ADD_STAT(pfSpanPage, statistics::units::Count::get(),
              "number of prefetches that crossed the page"),
@@ -330,7 +330,7 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
     ADD_STAT(pfTransFailed, statistics::units::Count::get(),
              "number of pfq empty and translation not avaliable immediately "
              "when there is a chance for prefetch"),
-    ADD_STAT(pfTransFailedPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfTransFailedPerPfPC, statistics::units::Count::get(),
              "number of pfq empty and translation not avaliable immediately "
              "when there is a chance for prefetch")
 {
@@ -338,23 +338,23 @@ Queued::QueuedStats::QueuedStats(statistics::Group *parent)
 
     int max_per_pc = 32;
 
-    pfBufferHitPerPC
+    pfBufferHitPerPfPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
-    pfInCachePerPC
+    pfInCachePerPfPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
-    pfRemovedDemandPerPC
+    pfRemovedDemandPerPfPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
-    pfRemovedFullPerPC
+    pfRemovedFullPerPfPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
-    pfTransFailedPerPC
+    pfTransFailedPerPfPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
@@ -374,11 +374,11 @@ Queued::QueuedStats::regQueuedPerPC(const std::vector<Addr>& stats_pc_list)
         stream << std::hex << stats_pc_list[i];
         std::string pc_name = stream.str();
 
-        pfBufferHitPerPC.subname(i, pc_name);
-        pfInCachePerPC.subname(i, pc_name);
-        pfRemovedDemandPerPC.subname(i, pc_name);
-        pfRemovedFullPerPC.subname(i, pc_name);
-        pfTransFailedPerPC.subname(i, pc_name);
+        pfBufferHitPerPfPC.subname(i, pc_name);
+        pfInCachePerPfPC.subname(i, pc_name);
+        pfRemovedDemandPerPfPC.subname(i, pc_name);
+        pfRemovedFullPerPfPC.subname(i, pc_name);
+        pfTransFailedPerPfPC.subname(i, pc_name);
     }
 }
 
@@ -423,7 +423,7 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
                 Addr req_pc = it->pfInfo.getPC();
                 for (int i = 0; i < stats_pc_list.size(); i++) {
                     if (req_pc == stats_pc_list[i]) {
-                        statsQueued.pfInCachePerPC[i]++;
+                        statsQueued.pfInCachePerPfPC[i]++;
                         break;
                     }
                 }
@@ -447,7 +447,7 @@ Queued::translationComplete(DeferredPacket *dp, bool failed)
             Addr req_pc = it->pfInfo.getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    statsQueued.pfTransFailedPerPC[i]++;
+                    statsQueued.pfTransFailedPerPfPC[i]++;
                     break;
                 }
             }
@@ -473,7 +473,7 @@ Queued::alreadyInQueue(std::list<DeferredPacket> &queue,
             Addr req_pc = pfi.getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    statsQueued.pfBufferHitPerPC[i]++;
+                    statsQueued.pfBufferHitPerPfPC[i]++;
                     break;
                 }
             }
@@ -590,7 +590,7 @@ Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
             Addr req_pc = new_pfi.getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    statsQueued.pfInCachePerPC[i]++;
+                    statsQueued.pfInCachePerPfPC[i]++;
                     break;
                 }
             }
@@ -632,7 +632,7 @@ Queued::addToQueue(std::list<DeferredPacket> &queue,
             Addr req_pc = dpp.pfInfo.getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
                 if (req_pc == stats_pc_list[i]) {
-                    statsQueued.pfRemovedFullPerPC[i]++;
+                    statsQueued.pfRemovedFullPerPfPC[i]++;
                     break;
                 }
             }

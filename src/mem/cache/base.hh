@@ -1016,6 +1016,9 @@ class BaseCache : public ClockedObject
             @sa Packet::Command */
         statistics::Vector hits;
         statistics::Vector hitsPerPC;
+
+        statistics::Vector hitsAtPf;
+        statistics::Vector hitsAtPfPerPC;
         /** Number of misses per thread for each type of command.
             @sa Packet::Command */
         statistics::Vector misses;
@@ -1076,6 +1079,8 @@ class BaseCache : public ClockedObject
         /** Number of hits for demand accesses. */
         statistics::Formula demandHits;
         statistics::Formula demandHitsPerPC;
+        statistics::Formula demandHitsAtPf;
+        statistics::Formula demandHitsAtPfPerPC;
         /** Number of hit for all accesses. */
         statistics::Formula overallHits;
         /** Total number of ticks spent waiting for demand hits. */
@@ -1354,18 +1359,32 @@ class BaseCache : public ClockedObject
     }
     void incHitCount(PacketPtr pkt)
     {
+        CacheBlk* blk = tags->findBlock(pkt->getAddr(), pkt->isSecure()); 
+
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(pkt).hits[pkt->req->requestorId()]++;
+
+        if (prefetcher && blk->wasPrefetched()) {
+            stats.cmdStats(pkt).hitsAtPf[pkt->req->requestorId()]++;
+        }
 
         if (pkt->req->hasPC()) {
             Addr req_pc = pkt->req->getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
+
                 if (req_pc == stats_pc_list[i]) {
+
                     stats.cmdStats(pkt).hitsPerPC[i]++;
+
+                    if (prefetcher && blk->wasPrefetched()) {
+                        stats.cmdStats(pkt).hitsAtPfPerPC[i]++;
+                    }
+
                     break;
                 }
             }
         }
+
     }
 
     /**
