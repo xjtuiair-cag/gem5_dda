@@ -77,7 +77,7 @@ Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
         // TODO: Should also tag ContexID?
     }
     if (tag_vaddr) {
-        pkt->req->setVaddr(pfInfo.getAddr());
+        pkt->req->setVaddr(pfInfo.getAddr() + (paddr - owner->blockAddress(paddr)));
     }
     tick = t;
 }

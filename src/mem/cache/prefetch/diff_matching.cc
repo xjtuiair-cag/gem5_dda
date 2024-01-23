@@ -536,7 +536,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
             }
 
             /* calculate target prefetch address */
-            Addr pf_addr = blockAddress((resp_data << rt_ent.shift) + rt_ent.target_base_addr);
+            Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
             DPRINTF(HWPrefetch, 
                     "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
@@ -561,8 +561,11 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
 void 
 DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID, int32_t priority)
 {
+    Addr blk_pf_addr = blockAddress(pf_addr);
+
     /** get a fake pfi, generator pc is target_pc for chain-trigger */
-    PrefetchInfo fake_pfi(pf_addr, target_pc, requestorId);
+    /** use blk-aligned address for repeation check in PFQ */
+    PrefetchInfo fake_pfi(blk_pf_addr, target_pc, requestorId);
     
     statsDMP.dmp_pfIdentified++;
     for (int i = 0; i < dmp_stats_pc.size(); i++) {
@@ -589,7 +592,8 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
 
     /* no need trigger virtual addr for DMP */
     dpp.pfInfo.setPC(target_pc); // setting target pc
-    dpp.pfInfo.setAddr(pf_addr); // setting target virtual addr
+    dpp.pfInfo.setAddr(blk_pf_addr); // setting target virtual addr, blk-aligned
+
     // TODO: should set ContextID
 
     /* make translation request and set PREFETCH flag*/
