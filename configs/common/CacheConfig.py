@@ -286,10 +286,14 @@ def config_cache(options, system):
                 system.l2.prefetcher.degree = getattr(options, "stride_degree", 4)
 
             if options.l2_hwp_type == "DiffMatchingPrefetcher":
-                system.l2.prefetcher.set_probe_obj(
-                    system.cpu[i].dcache, system.cpu[i].dcache, system.l2
-                )
-                #system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2, system.l2)
+
+                if options.dmp_notify == "l1":
+                    system.l2.prefetcher.set_probe_obj(
+                        system.cpu[i].dcache, system.cpu[i].dcache, system.l2
+                    )
+                if options.dmp_notify == "l2":
+                    system.l2.prefetcher.set_probe_obj(system.cpu[i].dcache, system.l2, system.l2)
+
                 if options.l1d_hwp_type == "StridePrefetcher":
                     print("Add L1 StridePrefetcher as L2 DMP helper.")
                     system.l2.prefetcher.set_pf_helper(system.cpu[i].dcache.prefetcher)

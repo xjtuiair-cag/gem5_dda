@@ -390,6 +390,13 @@ def addCommonOptions(parser):
         help="Bench name in order to init DMP indirect pattern"
     )
     parser.add_argument(
+        "--dmp-notify", 
+        default=None,
+        action="store",
+        type=str,
+        help="DMP is notified by which cache"
+    )
+    parser.add_argument(
         "--tlb-size",
         default=64,
         action="store",
