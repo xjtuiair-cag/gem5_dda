@@ -1019,6 +1019,10 @@ class BaseCache : public ClockedObject
 
         statistics::Vector hitsAtPf;
         statistics::Vector hitsAtPfPerPC;
+
+        statistics::Vector hitsAtPfAlloc;
+        statistics::Vector hitsAtPfAllocPerPC;
+
         /** Number of misses per thread for each type of command.
             @sa Packet::Command */
         statistics::Vector misses;
@@ -1081,6 +1085,19 @@ class BaseCache : public ClockedObject
         statistics::Formula demandHitsPerPC;
         statistics::Formula demandHitsAtPf;
         statistics::Formula demandHitsAtPfPerPC;
+
+        statistics::Formula demandHitsAtPfAlloc;
+        statistics::Formula demandHitsAtPfAllocPerPC;
+
+        statistics::Formula hitsAtPfCoverAccess;
+        statistics::Formula hitsAtPfCoverAccessPerPC;
+
+        statistics::Formula hitsAtPfAllocCoverAccess;
+        statistics::Formula hitsAtPfAllocCoverAccessPerPC;
+
+        statistics::Formula hitsPfRatio;
+        statistics::Formula hitsPfRatioPerPC;
+
         /** Number of hit for all accesses. */
         statistics::Formula overallHits;
         /** Total number of ticks spent waiting for demand hits. */
@@ -1368,6 +1385,10 @@ class BaseCache : public ClockedObject
             stats.cmdStats(pkt).hitsAtPf[pkt->req->requestorId()]++;
         }
 
+        if (prefetcher && blk->fromPrefetched()) {
+            stats.cmdStats(pkt).hitsAtPfAlloc[pkt->req->requestorId()]++;
+        }
+
         if (pkt->req->hasPC()) {
             Addr req_pc = pkt->req->getPC();
             for (int i = 0; i < stats_pc_list.size(); i++) {
@@ -1378,6 +1399,10 @@ class BaseCache : public ClockedObject
 
                     if (prefetcher && blk->wasPrefetched()) {
                         stats.cmdStats(pkt).hitsAtPfPerPC[i]++;
+                    }
+
+                    if (prefetcher && blk->fromPrefetched()) {
+                        stats.cmdStats(pkt).hitsAtPfAllocPerPC[i]++;
                     }
 
                     break;

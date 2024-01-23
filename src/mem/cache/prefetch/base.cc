@@ -174,18 +174,18 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     // "coverage brought by this prefetcher"),
     // ADD_STAT(coveragePerPC, statistics::units::Count::get(),
     // "coverage brought by this prefetcher"),
-    ADD_STAT(coverage_cosumed, statistics::units::Count::get(),
-        "coverage_cosumed of the prefetcher"),
-    ADD_STAT(coverage_cosumed_perPfPC, statistics::units::Count::get(),
-        "coverage_cosumed of the prefetcher"),
-    ADD_STAT(coverage_effective, statistics::units::Count::get(),
-        "coverage_effective of the prefetcher"),
-    ADD_STAT(coverage_effective_perPfPC, statistics::units::Count::get(),
-        "coverage_effective of the prefetcher"),
-    ADD_STAT(coverage_timely, statistics::units::Count::get(),
-        "coverage_timely of the prefetcher"),
-    ADD_STAT(coverage_timely_perPfPC, statistics::units::Count::get(),
-        "coverage_timely of the prefetcher"),
+    ADD_STAT(pf_cosumed, statistics::units::Count::get(),
+        "pf_cosumed of the prefetcher"),
+    ADD_STAT(pf_cosumed_perPfPC, statistics::units::Count::get(),
+        "pf_cosumed of the prefetcher"),
+    ADD_STAT(pf_effective, statistics::units::Count::get(),
+        "pf_effective of the prefetcher"),
+    ADD_STAT(pf_effective_perPfPC, statistics::units::Count::get(),
+        "pf_effective of the prefetcher"),
+    ADD_STAT(pf_timely, statistics::units::Count::get(),
+        "pf_timely of the prefetcher"),
+    ADD_STAT(pf_timely_perPfPC, statistics::units::Count::get(),
+        "pf_timely of the prefetcher"),
     ADD_STAT(accuracy_cache, statistics::units::Count::get(),
         "accuracy_cache of the prefetcher"),
     ADD_STAT(accuracy_cache_perPfPC, statistics::units::Count::get(),
@@ -233,17 +233,17 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     // accuracy.flags(total | nonan);
     // accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
 
-    /* coverage_cosumed = hwpf_mshr_miss / overall_mshr_miss */
-    coverage_cosumed.flags(total | nonan);
-    coverage_cosumed = (pfIssued - pfLate) / (pfIssued - pfLate + demandMshrMisses);
+    /* pf_cosumed = hwpf_mshr_miss / overall_mshr_miss */
+    pf_cosumed.flags(total | nonan);
+    pf_cosumed = (pfIssued - pfLate) / (pfIssued - pfLate + demandMshrMisses);
 
-    /* coverage_effective = (pfUseful + demandMSHRHitAtPf) / hwpf_mshr_miss */
-    coverage_effective.flags(total | nonan);
-    coverage_effective = (pfUseful + demandMshrHitsAtPf) / (pfIssued - pfLate);
+    /* pf_effective = (pfUseful + demandMSHRHitAtPf) / hwpf_mshr_miss */
+    pf_effective.flags(total | nonan);
+    pf_effective = (pfUseful + demandMshrHitsAtPf) / (pfIssued - pfLate);
 
-    /* coverage_timely = pfUseful / (pfUseful + demandMshrHitsAtPf) */
-    coverage_timely.flags(total | nonan);
-    coverage_timely = pfUseful / (pfUseful + demandMshrHitsAtPf);
+    /* pf_timely = pfUseful / (pfUseful + demandMshrHitsAtPf) */
+    pf_timely.flags(total | nonan);
+    pf_timely = pfUseful / (pfUseful + demandMshrHitsAtPf);
 
     /** NOTE: if pfLate, cache will reschedule memside's send event.
      * If next ready time is later than curTick(), 
@@ -251,7 +251,7 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
      * So pfLate will not delay the timing of the whole cache, mostly.
      */
 
-    /* accuracy_cache = coverage_effective * coverage_timely */
+    /* accuracy_cache = pf_effective * pf_timely */
     /*                = pfUseful / hwpf_mshr_miss            */
     accuracy_cache.flags(total | nonan);
     accuracy_cache = pfUseful / (pfIssued - pfLate);
@@ -315,14 +315,14 @@ Base::StatGroup::StatGroup(statistics::Group *parent)
     pfLateRatePerPfPC.flags(nozero | nonan);
     pfLateRatePerPfPC = pfLatePerPfPC / pfIssuedPerPfPC;
 
-    coverage_cosumed_perPfPC.flags(total | nonan);
-    coverage_cosumed_perPfPC = (pfIssuedPerPfPC - pfLatePerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC + demandMshrMissesPerPC);
+    pf_cosumed_perPfPC.flags(total | nonan);
+    pf_cosumed_perPfPC = (pfIssuedPerPfPC - pfLatePerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC + demandMshrMissesPerPC);
 
-    coverage_effective_perPfPC.flags(total | nonan);
-    coverage_effective_perPfPC = (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC);
+    pf_effective_perPfPC.flags(total | nonan);
+    pf_effective_perPfPC = (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC);
 
-    coverage_timely_perPfPC.flags(total | nonan);
-    coverage_timely_perPfPC = pfUsefulPerPfPC / (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC);
+    pf_timely_perPfPC.flags(total | nonan);
+    pf_timely_perPfPC = pfUsefulPerPfPC / (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC);
 
     accuracy_cache_perPfPC.flags(total | nonan);
     accuracy_cache_perPfPC = pfUsefulPerPfPC / (pfIssuedPerPfPC - pfLatePerPfPC);
@@ -360,9 +360,9 @@ Base::StatGroup::regStatsPerPC(const std::vector<Addr> &stats_pc_list)
         pfLatePerPfPC.subname(i, pc_name);
         pfLateRatePerPfPC.subname(i, pc_name);
 
-        coverage_cosumed_perPfPC.subname(i, pc_name);
-        coverage_effective_perPfPC.subname(i, pc_name);
-        coverage_timely_perPfPC.subname(i, pc_name);
+        pf_cosumed_perPfPC.subname(i, pc_name);
+        pf_effective_perPfPC.subname(i, pc_name);
+        pf_timely_perPfPC.subname(i, pc_name);
         accuracy_cache_perPfPC.subname(i, pc_name);
         accuracy_prefetcher_perPfPC.subname(i, pc_name);
     }

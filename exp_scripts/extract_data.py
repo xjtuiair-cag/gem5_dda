@@ -88,9 +88,9 @@ def gen_field_record(field_values):
 
 stats_names = [
         'simSeconds',
-        'system.l2.prefetcher.coverage_cosumed_perPfPC::400ca0',
-        'system.l2.prefetcher.coverage_effective_perPfPC::400ca0',
-        'system.l2.prefetcher.coverage_timely_perPfPC::400ca0',
+        'system.l2.prefetcher.pf_cosumed_perPfPC::400ca0',
+        'system.l2.prefetcher.pf_effective_perPfPC::400ca0',
+        'system.l2.prefetcher.pf_timely_perPfPC::400ca0',
         'system.l2.prefetcher.accuracy_cache_perPfPC::400ca0',
         'system.l2.prefetcher.accuracy_prefetcher_perPfPC::400ca0',
         'pfLateRatePerPfPC::400ca0',

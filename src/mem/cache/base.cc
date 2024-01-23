@@ -2114,6 +2114,10 @@ BaseCache::CacheCmdStats::CacheCmdStats(BaseCache &c,
                ("number of " + name + " hits").c_str()),
       ADD_STAT(hitsAtPfPerPC, statistics::units::Count::get(),
                ("number of " + name + " hits").c_str()),
+      ADD_STAT(hitsAtPfAlloc, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
+      ADD_STAT(hitsAtPfAllocPerPC, statistics::units::Count::get(),
+               ("number of " + name + " hits").c_str()),
       ADD_STAT(misses, statistics::units::Count::get(),
                ("number of " + name + " misses").c_str()),
       ADD_STAT(missesPerPC, statistics::units::Count::get(),
@@ -2190,6 +2194,14 @@ BaseCache::CacheCmdStats::regStatsFromParent()
         ;
     for (int i = 0; i < max_requestors; i++) {
         hitsAtPf.subname(i, system->getRequestorName(i));
+    }
+
+    hitsAtPfAlloc
+        .init(max_requestors)
+        .flags(total | nozero | nonan)
+        ;
+    for (int i = 0; i < max_requestors; i++) {
+        hitsAtPfAlloc.subname(i, system->getRequestorName(i));
     }
 
     // Miss statistics
@@ -2320,6 +2332,7 @@ BaseCache::CacheCmdStats::regStatsFromParent()
 
     hitsPerPC.init(max_per_pc).flags(nozero | nonan);
     hitsAtPfPerPC.init(max_per_pc).flags(nozero | nonan);
+    hitsAtPfAllocPerPC.init(max_per_pc).flags(nozero | nonan);
     missesPerPC.init(max_per_pc).flags(nozero | nonan);
     mshrHitsPerPC.init(max_per_pc).flags(nozero | nonan);
     mshrHitsAtPfPerPC.init(max_per_pc).flags(nozero | nonan);
@@ -2336,6 +2349,7 @@ BaseCache::CacheCmdStats::regStatsFromParent()
 
         hitsPerPC.subname(i, pc_hex);
         hitsAtPfPerPC.subname(i, pc_hex);
+        hitsAtPfAllocPerPC.subname(i, pc_hex);
         missesPerPC.subname(i, pc_hex);
         accessesPerPC.subname(i, pc_hex);
         mshrHitsPerPC.subname(i, pc_hex);
@@ -2357,6 +2371,22 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
              "number of demand (read+write) hits"),
     ADD_STAT(demandHitsAtPfPerPC, statistics::units::Count::get(),
              "number of demand (read+write) hits"),
+    ADD_STAT(demandHitsAtPfAlloc, statistics::units::Count::get(),
+             "number of demand (read+write) hits"),
+    ADD_STAT(demandHitsAtPfAllocPerPC, statistics::units::Count::get(),
+             "number of demand (read+write) hits"),
+    ADD_STAT(hitsAtPfCoverAccess, statistics::units::Count::get(),
+             "hits at prefetch / demand accesses"),
+    ADD_STAT(hitsAtPfCoverAccessPerPC, statistics::units::Count::get(),
+             "hits at prefetch / demand accesses"),
+    ADD_STAT(hitsAtPfAllocCoverAccess, statistics::units::Count::get(),
+             "hits at prefetch alloc / demand accesses"),
+    ADD_STAT(hitsAtPfAllocCoverAccessPerPC, statistics::units::Count::get(),
+             "hits at prefetch alloc / demand accesses"),
+    ADD_STAT(hitsPfRatio, statistics::units::Count::get(),
+             "hits at prefetch alloc / hits at prefetch"),
+    ADD_STAT(hitsPfRatioPerPC, statistics::units::Count::get(),
+             "hits at prefetch alloc / hits at prefetch"),
     ADD_STAT(overallHits, statistics::units::Count::get(),
              "number of overall hits"),
     ADD_STAT(demandHitLatency, statistics::units::Tick::get(),
@@ -2492,11 +2522,20 @@ BaseCache::CacheStats::regStats()
         demandHitsAtPf.subname(i, system->getRequestorName(i));
     }
 
+    demandHitsAtPfAlloc.flags(total | nozero | nonan);
+    demandHitsAtPfAlloc = SUM_DEMAND(hitsAtPfAlloc);
+    for (int i = 0; i < max_requestors; i++) {
+        demandHitsAtPfAlloc.subname(i, system->getRequestorName(i));
+    }
+
     demandHitsPerPC.flags(total | nozero | nonan);
     demandHitsPerPC = SUM_DEMAND(hitsPerPC);
 
     demandHitsAtPfPerPC.flags(total | nozero | nonan);
     demandHitsAtPfPerPC = SUM_DEMAND(hitsAtPfPerPC);
+
+    demandHitsAtPfAllocPerPC.flags(total | nozero | nonan);
+    demandHitsAtPfAllocPerPC = SUM_DEMAND(hitsAtPfAllocPerPC);
 
     overallHits.flags(total | nozero | nonan);
     overallHits = demandHits + SUM_NON_DEMAND(hits);
@@ -2713,6 +2752,24 @@ BaseCache::CacheStats::regStats()
     dataExpansions.flags(nozero | nonan);
     dataContractions.flags(nozero | nonan);
 
+    hitsAtPfCoverAccess.flags(total | nozero | nonan);
+    hitsAtPfCoverAccess = demandHitsAtPf / demandAccesses;
+
+    hitsAtPfCoverAccessPerPC.flags(total | nozero | nonan);
+    hitsAtPfCoverAccessPerPC = demandHitsAtPfPerPC / demandAccessesPerPC;
+
+    hitsAtPfAllocCoverAccess.flags(total | nozero | nonan);
+    hitsAtPfAllocCoverAccess = demandHitsAtPfAlloc / demandAccesses;
+
+    hitsAtPfAllocCoverAccessPerPC.flags(total | nozero | nonan);
+    hitsAtPfAllocCoverAccessPerPC = demandHitsAtPfAllocPerPC / demandAccessesPerPC;
+
+    hitsPfRatio.flags(total | nozero | nonan);
+    hitsPfRatio = demandHitsAtPfAlloc / demandHitsAtPf;
+
+    hitsPfRatioPerPC.flags(total | nozero | nonan);
+    hitsPfRatioPerPC = demandHitsAtPfAllocPerPC / demandHitsAtPfPerPC;
+
     // PerPC stats
     for (int i = 0; i < stats_pc_list.size(); i++) {
         std::stringstream stream;
@@ -2721,6 +2778,10 @@ BaseCache::CacheStats::regStats()
 
         demandHitsPerPC.subname(i, pc_hex);
         demandHitsAtPfPerPC.subname(i, pc_hex);
+        demandHitsAtPfAllocPerPC.subname(i, pc_hex);
+        hitsAtPfCoverAccessPerPC.subname(i, pc_hex);
+        hitsAtPfAllocCoverAccessPerPC.subname(i, pc_hex);
+        hitsPfRatioPerPC.subname(i, pc_hex);
         demandMissesPerPC.subname(i, pc_hex);
         demandAccessesPerPC.subname(i, pc_hex);
         demandMissRatePerPC.subname(i, pc_hex);

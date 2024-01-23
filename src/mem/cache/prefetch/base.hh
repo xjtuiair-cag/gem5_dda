@@ -376,12 +376,12 @@ class Base : public ClockedObject
         // statistics::Formula timely_accuracy_perPfPC;
         // statistics::Formula coverage;
         // statistics::Formula coveragePerPC;
-        statistics::Formula coverage_cosumed;
-        statistics::Formula coverage_cosumed_perPfPC;
-        statistics::Formula coverage_effective;
-        statistics::Formula coverage_effective_perPfPC;
-        statistics::Formula coverage_timely;
-        statistics::Formula coverage_timely_perPfPC;
+        statistics::Formula pf_cosumed;
+        statistics::Formula pf_cosumed_perPfPC;
+        statistics::Formula pf_effective;
+        statistics::Formula pf_effective_perPfPC;
+        statistics::Formula pf_timely;
+        statistics::Formula pf_timely_perPfPC;
         statistics::Formula accuracy_cache;
         statistics::Formula accuracy_cache_perPfPC;
         statistics::Formula accuracy_prefetcher;
