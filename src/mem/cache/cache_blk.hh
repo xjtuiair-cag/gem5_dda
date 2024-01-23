@@ -180,6 +180,7 @@ class CacheBlk : public TaggedEntry
 
         if (other.wasPrefetched()) {
             setPrefetched();
+            setPrefetchedAllocate();
         }
         setPC(other.getPC());
         setCoherenceBits(other.coherence);
@@ -203,6 +204,7 @@ class CacheBlk : public TaggedEntry
         TaggedEntry::invalidate();
 
         clearPrefetched();
+        clearPrefetchedAllocate();
         clearPC();
         clearCoherenceBits(AllBits);
 
@@ -258,6 +260,12 @@ class CacheBlk : public TaggedEntry
 
     /** Marks this blocks as a recently prefetched block. */
     void setPrefetched() { _prefetched = true; }
+
+    bool fromPrefetched() const { return _prefetched_allocate; };
+
+    void clearPrefetchedAllocate() { _prefetched_allocate = false; };
+
+    void setPrefetchedAllocate() { _prefetched_allocate = true; };
 
     Addr getPC() { return _src_pc; };
 
@@ -498,6 +506,8 @@ class CacheBlk : public TaggedEntry
 
     /** Whether this block is an unaccessed hardware prefetch. */
     bool _prefetched = 0;
+
+    bool _prefetched_allocate = 0;
 
     /** The PC which triggers the cache block refilled*/
     Addr _src_pc = MaxAddr;
