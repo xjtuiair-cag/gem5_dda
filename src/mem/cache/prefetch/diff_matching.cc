@@ -20,6 +20,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ent_num(p.rt_ent_num),
     range_ahead_dist(p.range_ahead_dist),
     indir_range(p.indir_range),
+    cur_range_priority(0),
+    range_group_size(p.range_group_size),
     iddt_diff_num(p.iddt_diff_num),
     tadt_diff_num(p.tadt_diff_num),
     iddt_ptr(0),
@@ -30,6 +32,20 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     statsDMP(this),
     pf_helper(nullptr)
 {
+
+    /**
+     * Priority Update Policy: 
+     * new range-type priority = cur.priority - range_group_size
+     * new single-type priority = parent_rte.priority + 1
+    */
+
+    // init cur_range_priority
+    cur_range_priority = std::numeric_limits<int32_t>::max();
+    cur_range_priority -= cur_range_priority % range_group_size;
+
+    /**
+     * Manual Mode
+    */
     std::vector<Addr> pc_list;
 
     // init IDDT
@@ -216,10 +232,10 @@ DiffMatching::insertRTE(
     assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
 
-    // get indexPC Range type, only matter when current indexPC as other pattern's target
+    /* get indexPC Range type */
     bool new_range_type;
 
-    // Stride PC also should be classified as Range
+    // Stride PC should be classified as Range
     // search for all requestor
     if(pf_helper) {
         new_range_type = pf_helper->checkStride(new_index_pc);
@@ -230,6 +246,7 @@ DiffMatching::insertRTE(
         //new_range_type = true;
     }
 
+    // try tadt's range detection
     if (!new_range_type) {
 
         // check rangeTable for range type
@@ -243,7 +260,15 @@ DiffMatching::insertRTE(
 
     }
 
-    int32_t priority = getPriority(new_index_pc, cID) + 1;
+    /* get priority */
+    int32_t priority;
+    if (new_range_type) {
+        priority = cur_range_priority;
+        cur_range_priority -= range_group_size;
+    } else {
+        priority = getPriority(new_index_pc, cID) + 1;
+        assert(priority % range_group_size > 0);
+    }
 
     DPRINTF(DMP, "Insert RelationTable: "
         "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d priority %d\n",

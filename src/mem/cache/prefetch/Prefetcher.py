@@ -710,6 +710,8 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     iddt_diff_num = Param.Unsigned(8, "Number of difference entries of iddt")
     tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")
 
+    range_group_size = Param.Unsigned(256, "Number of relations in each range group")
+
     stream_ahead_dist = Param.Unsigned(
         64, "Byte-distance prefetch ahead which triggered by stream refill"
     )
