@@ -1665,7 +1665,6 @@ BaseCache::handleFill(PacketPtr pkt, CacheBlk *blk, PacketList &writebacks,
         assert(pkt->getSize() == blkSize);
 
         updateBlockData(blk, pkt, has_old_data);
-        ppFill->notify(pkt);
     }
     // The block will be ready when the payload arrives and the fill is done
     blk->setWhenReady(clockEdge(fillLatency) + pkt->headerDelay +
