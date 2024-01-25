@@ -223,6 +223,7 @@ def config_mem(options, system):
                     and opt_simple_mem_bandwidth 
                 ):
                     dram_intf.bandwidth = opt_simple_mem_bandwidth 
+                    #dram_intf.latency = '0ns'
 
                 # Set the number of ranks based on the command-line
                 # options if it was explicitly set

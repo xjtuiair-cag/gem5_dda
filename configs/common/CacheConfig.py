@@ -320,7 +320,7 @@ def config_cache(options, system):
                 system.l2.prefetcher.use_virtual_addresses = True
                 system.l2.prefetcher.tag_vaddr = True
                 system.l2.prefetcher.stats_pc_list = monitor_pc_list 
-                system.l2.prefetcher.latency = 13
+                system.l2.prefetcher.latency = 15
                 if system.cpu[i].mmu.dtb:
                     print("Adding DTLB to L2 prefetcher.")
                     system.l2.prefetcher.registerTLB(system.cpu[i].mmu.dtb)

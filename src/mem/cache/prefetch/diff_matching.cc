@@ -20,6 +20,7 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ent_num(p.rt_ent_num),
     range_ahead_dist(p.range_ahead_dist),
     indir_range(p.indir_range),
+    notify_latency(p.notify_latency),
     cur_range_priority(0),
     range_group_size(p.range_group_size),
     iddt_diff_num(p.iddt_diff_num),
@@ -261,7 +262,7 @@ DiffMatching::insertRTE(
     }
 
     /* get priority */
-    int32_t priority;
+    int32_t priority = 0;
     if (new_range_type) {
         priority = cur_range_priority;
         cur_range_priority -= range_group_size;
@@ -672,7 +673,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     // e.g. L1 Prefetch Request access and hit at L2.
     // currently L1 HWPrefetch Request will be translated to ReadShared request at L2.
 
-    if (!pkt->req->isPrefetch()) {
+    //if (!pkt->req->isPrefetch()) {
         // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
         // When this called by ppHit->notify(), we use cache blk data to prefetch.
         CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
@@ -682,7 +683,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         if (try_cache_blk != nullptr && try_cache_blk->data) {
             notifyFill(pkt, try_cache_blk->data);
         }
-    }
+    //}
 
         // CacheBlk* try_miss_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
 

@@ -110,6 +110,7 @@ Queued::Queued(const QueuedPrefetcherParams &p)
       latency(p.latency), queueSquash(p.queue_squash),
       queueFilter(p.queue_filter), cacheSnoop(p.cache_snoop),
       tagPrefetch(p.tag_prefetch), tagVaddr(p.tag_vaddr),
+      crossPageCtrl(p.cross_page_ctrl),
       throttleControlPct(p.throttle_control_percentage), statsQueued(this)
 {
     assert(useVirtualAddresses == tagVaddr);
@@ -244,7 +245,7 @@ Queued::notify(const PacketPtr &pkt, const PrefetchInfo &pfi)
             }
         }
 
-        bool can_cross_page = (tlb != nullptr);
+        bool can_cross_page = (tlb != nullptr) && crossPageCtrl;
         if (can_cross_page || samePage(addr_prio.first, pfi.getAddr())) {
             PrefetchInfo new_pfi(pfi,addr_prio.first);
             statsQueued.pfIdentified++;

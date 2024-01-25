@@ -181,6 +181,8 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
             return;
         }
 
+        // if (pc == 0x400c70) pf_addr += blkSize;
+
         // Generate up to degree prefetches
         for (int d = 1; d <= degree; d++) {
             // Round strides up to atleast 1 cacheline

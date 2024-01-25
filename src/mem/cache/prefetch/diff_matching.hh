@@ -36,6 +36,8 @@ class DiffMatching : public Stride
     int range_ahead_dist;
     int indir_range;
 
+    int notify_latency;
+
     // priority init
     int32_t cur_range_priority;
     int32_t range_group_size;

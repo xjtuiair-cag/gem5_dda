@@ -175,6 +175,8 @@ class Queued : public Base
     /** Tag prefetch with Vaddr if generating with virtual address */
     const bool tagVaddr;
 
+    const bool crossPageCtrl;
+
     /** Percentage of requests that can be throttled */
     const unsigned int throttleControlPct;
 
