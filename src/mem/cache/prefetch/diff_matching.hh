@@ -399,7 +399,9 @@ class DiffMatching : public Stride
         int iddt_match_point, unsigned int shift, ContextID cID
     );
 
-    int32_t getPriority(Addr target_pc, ContextID cID);
+    int32_t getPriority(Addr pc_in, ContextID cID_in);
+
+    bool getRangeType(Addr index_pc_in, ContextID cID_in);
 
 
     /** DMP specific stats */
@@ -446,6 +448,8 @@ class DiffMatching : public Stride
 
     void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, 
                                 ContextID cID, int32_t priority);
+
+    void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr);
 
     void addPfHelper(Stride* s);
 

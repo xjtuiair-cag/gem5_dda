@@ -537,6 +537,20 @@ DiffMatching::getPriority(Addr pc_in, ContextID cID_in)
 }
 
 bool
+DiffMatching::getRangeType(Addr index_pc_in, ContextID cID_in)
+{
+    for (auto& rt_ent : relationTable) {
+        
+        // if (!rt_ent.valid()) continue;
+
+        if (rt_ent.index_pc == index_pc_in && rt_ent.cID == cID_in) {
+            return rt_ent.range;
+        }
+    }
+    return false;
+}
+
+bool
 DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
 {
     // continuity check
@@ -766,20 +780,20 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
         } while (data_offset_debug < blkSize);
     }
 
+    /* Assume response data is a int and always occupies 4 bytes */
+    const int data_stride = 4;
+    const int byte_width = 8;
+
     Addr pc = pkt->req->getPC();
+    unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
     for (const auto& rt_ent: relationTable) { 
 
         if (!rt_ent.valid) continue;
 
         if (rt_ent.index_pc != pc) continue;
 
-        /* Assume response data is a int and always occupies 4 bytes */
-        const int data_stride = 4;
-        const int byte_width = 8;
-
         /* set range_end, only process one data if not range type */
         unsigned range_end;
-        unsigned data_offset = pkt->req->getPaddr() & (blkSize-1);
         if (rt_ent.range) {
             range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
         } else {
@@ -872,6 +886,49 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
 }
 
 void
+DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr)
+{
+    /* get response data */
+    uint8_t fill_data[blkSize];
+    std::memcpy(fill_data, data_ptr, blkSize);
+
+    /* Assume response data is a int and always occupies 4 bytes */
+    const int data_stride = 4;
+    const int byte_width = 8;
+
+    unsigned data_offset = addr & (blkSize-1);
+    for (const auto& rt_ent: relationTable) { 
+
+        if (rt_ent.index_pc != pc) continue;
+
+        /* integrate fill_data[] to resp_data (considered as unsigned)  */
+        uint64_t resp_data = 0;
+        for (int i_st = data_stride-1; i_st >= 0; i_st--) {
+            resp_data = resp_data << byte_width;
+            resp_data += static_cast<uint64_t>(fill_data[data_offset + i_st]);
+        }
+
+        /* calculate target prefetch address */
+        Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
+        DPRINTF(HWPrefetch, 
+                "hitTrigger: PC %llx, Addr %llx, data_offset %d, data %d, pf_addr %llx\n", 
+                pc, addr, data_offset, resp_data, pf_addr);
+
+        // insert to missing translation queue
+        insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+        
+        if (rt_ent.target_pc == 0x400ca0) {
+            for (int i = 1; i <= range_ahead_dist; i++) {
+                insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+            }
+        }
+
+        // try to do translation immediately
+        processMissingTranslations(queueSize - pfq.size());
+    }
+}
+
+void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
     if (pfi.isCacheMiss()) {
@@ -911,26 +968,36 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     // e.g. L1 Prefetch Request access and hit at L2.
     // currently L1 HWPrefetch Request will be translated to ReadShared request at L2.
 
-    //if (!pkt->req->isPrefetch()) {
-        // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
-        // When this called by ppHit->notify(), we use cache blk data to prefetch.
-        CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+    //if (pfi.isCacheMiss) { 
+    //// DMP only observes DCache Miss (L2 Access), intent to reduce BranchPredMiss influence
 
-        // assert(try_cache_blk && try_cache_blk->data);
+    //    // if (!pkt->req->isPrefetch()) {
+        if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+            bool range_type = getRangeType(
+                pkt->req->getPC(), pkt->req->contextId()
+            );
 
-        if (try_cache_blk != nullptr && try_cache_blk->data) {
-            notifyFill(pkt, try_cache_blk->data);
+            if (range_type) {
+                // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
+                // When this called by ppHit->notify(), we use cache blk data to prefetch.
+                CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+                if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
+                    //notifyFill(pkt, try_cache_blk->data);
+                    if (pkt->req->getOffset() + 4 < blkSize) {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+4, try_cache_blk->data);
+                    } else {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
+                    }
+                }
+
+                // assert(try_cache_blk && try_cache_blk->data);
+
+            }
         }
+    //    // }
+
     //}
-
-        // CacheBlk* try_miss_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
-
-        // if (try_miss_blk != nullptr) {
-        //     assert(try_miss_blk && try_miss_blk->data);
-        //     notifyFill(pkt, try_miss_blk->data);
-
-        //     DPRINTF(HWPrefetch, "notify:: Hit at prefetcher's cache, try DMP prefetch.\n");
-        // }
 
     Queued::notify(pkt, pfi);
 }
