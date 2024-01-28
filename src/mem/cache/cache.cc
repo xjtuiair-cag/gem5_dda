@@ -938,12 +938,11 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
     if (blk && !from_core && from_pref) {
         blk->setPrefetched();
         blk->setPrefetchedAllocate();
-<<<<<<< HEAD
         stats.prefetchFills++;
-=======
+    }
 
+    if (from_pref) {
         ppFill->notify(pkt);
->>>>>>> f2bd8a715c (src: change ppFill to only for prefetch)
     }
 
     if (blk && pkt->req->hasPC()) {
