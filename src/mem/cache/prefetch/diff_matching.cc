@@ -901,25 +901,38 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr)
 
         if (rt_ent.index_pc != pc) continue;
 
-        /* integrate fill_data[] to resp_data (considered as unsigned)  */
-        uint64_t resp_data = 0;
-        for (int i_st = data_stride-1; i_st >= 0; i_st--) {
-            resp_data = resp_data << byte_width;
-            resp_data += static_cast<uint64_t>(fill_data[data_offset + i_st]);
+        /* set range_end, only process one data if not range type */
+        unsigned range_end;
+        if (rt_ent.range) {
+            range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
+        } else {
+            range_end = data_offset + data_stride;
         }
 
-        /* calculate target prefetch address */
-        Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
-        DPRINTF(HWPrefetch, 
-                "hitTrigger: PC %llx, Addr %llx, data_offset %d, data %d, pf_addr %llx\n", 
-                pc, addr, data_offset, resp_data, pf_addr);
+        /* loop for range prefetch */
+        for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
+        {
 
-        // insert to missing translation queue
-        insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
-        
-        if (rt_ent.target_pc == 0x400ca0) {
-            for (int i = 1; i <= range_ahead_dist; i++) {
-                insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+            /* integrate fill_data[] to resp_data (considered as unsigned)  */
+            uint64_t resp_data = 0;
+            for (int i_st = data_stride-1; i_st >= 0; i_st--) {
+                resp_data = resp_data << byte_width;
+                resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
+            }
+
+            /* calculate target prefetch address */
+            Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
+            DPRINTF(HWPrefetch, 
+                    "hitTrigger: PC %llx, Addr %llx, data_offset %d, data %d, pf_addr %llx\n", 
+                    pc, addr, data_offset, resp_data, pf_addr);
+
+            // insert to missing translation queue
+            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+            
+            if (rt_ent.target_pc == 0x400ca0) {
+                for (int i = 1; i <= range_ahead_dist; i++) {
+                    insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+                }
             }
         }
 
@@ -972,29 +985,29 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     //// DMP only observes DCache Miss (L2 Access), intent to reduce BranchPredMiss influence
 
     //    // if (!pkt->req->isPrefetch()) {
-        if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-            bool range_type = getRangeType(
-                pkt->req->getPC(), pkt->req->contextId()
-            );
+    //    if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+    //        bool range_type = getRangeType(
+    //            pkt->req->getPC(), pkt->req->contextId()
+    //        );
 
-            if (range_type) {
-                // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
-                // When this called by ppHit->notify(), we use cache blk data to prefetch.
-                CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+    //        if (range_type) {
+    //            // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
+    //            // When this called by ppHit->notify(), we use cache blk data to prefetch.
+    //            CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
 
-                if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
-                    //notifyFill(pkt, try_cache_blk->data);
-                    if (pkt->req->getOffset() + 4 < blkSize) {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+4, try_cache_blk->data);
-                    } else {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
-                    }
-                }
+    //            if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
+    //                //notifyFill(pkt, try_cache_blk->data);
+    //                if (pkt->req->getOffset() + 4 < blkSize) {
+    //                    hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+4, try_cache_blk->data);
+    //                } else {
+    //                    hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
+    //                }
+    //            }
 
-                // assert(try_cache_blk && try_cache_blk->data);
+    //            // assert(try_cache_blk && try_cache_blk->data);
 
-            }
-        }
+    //        }
+    //    }
     //    // }
 
     //}
