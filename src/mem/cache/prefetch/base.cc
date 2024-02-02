@@ -75,20 +75,22 @@ Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
         Addr offset = pkt->req->getPaddr() - pkt->getAddr();
         std::memcpy(data, &(pkt->getConstPtr<uint8_t>()[offset]), req_size);
     }
+
+    fill_trigger = false;
 }
 
 Base::PrefetchInfo::PrefetchInfo(PrefetchInfo const &pfi, Addr addr)
   : address(addr), pc(pfi.pc), requestorId(pfi.requestorId),
     validPC(pfi.validPC), secure(pfi.secure), size(pfi.size),
     write(pfi.write), paddress(pfi.paddress), cacheMiss(pfi.cacheMiss),
-    cID(pfi.cID), data(nullptr)
+    cID(pfi.cID), data(nullptr), fill_trigger(pfi.fill_trigger)
 {
 }
 
 Base::PrefetchInfo::PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID, ContextID cID)
   : address(addr), pc(pc), requestorId(requestorId), validPC(true),
     secure(false), size(0), write(false), paddress(0x0), cacheMiss(false),
-    cID(cID), data(nullptr)
+    cID(cID), data(nullptr), fill_trigger(true)
 {
 }
 

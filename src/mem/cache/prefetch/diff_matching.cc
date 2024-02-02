@@ -902,22 +902,22 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr)
         if (rt_ent.index_pc != pc) continue;
 
         /* set range_end, only process one data if not range type */
-        unsigned range_end;
-        if (rt_ent.range) {
-            range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
-        } else {
-            range_end = data_offset + data_stride;
-        }
+        // unsigned range_end;
+        // if (rt_ent.range) {
+        //     range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
+        // } else {
+        //     range_end = data_offset + data_stride;
+        // }
 
         /* loop for range prefetch */
-        for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
-        {
+        // for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
+        // {
 
             /* integrate fill_data[] to resp_data (considered as unsigned)  */
             uint64_t resp_data = 0;
             for (int i_st = data_stride-1; i_st >= 0; i_st--) {
                 resp_data = resp_data << byte_width;
-                resp_data += static_cast<uint64_t>(fill_data[i_of + i_st]);
+                resp_data += static_cast<uint64_t>(fill_data[data_offset + i_st]);
             }
 
             /* calculate target prefetch address */
@@ -934,7 +934,7 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr)
                     insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
                 }
             }
-        }
+        // }
 
         // try to do translation immediately
         processMissingTranslations(queueSize - pfq.size());
@@ -985,29 +985,37 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     //// DMP only observes DCache Miss (L2 Access), intent to reduce BranchPredMiss influence
 
     //    // if (!pkt->req->isPrefetch()) {
-    //    if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-    //        bool range_type = getRangeType(
-    //            pkt->req->getPC(), pkt->req->contextId()
-    //        );
 
-    //        if (range_type) {
-    //            // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
-    //            // When this called by ppHit->notify(), we use cache blk data to prefetch.
-    //            CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+        // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
+        // When this called by ppHit->notify(), we use cache blk data to prefetch.
+        CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
 
-    //            if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
-    //                //notifyFill(pkt, try_cache_blk->data);
-    //                if (pkt->req->getOffset() + 4 < blkSize) {
-    //                    hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+4, try_cache_blk->data);
-    //                } else {
-    //                    hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
-    //                }
-    //            }
+       if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+           bool range_type = getRangeType(
+               pkt->req->getPC(), pkt->req->contextId()
+           );
 
-    //            // assert(try_cache_blk && try_cache_blk->data);
+           if (range_type) {
 
-    //        }
-    //    }
+               if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
+                   //notifyFill(pkt, try_cache_blk->data);
+
+                for (int i=0; ; i+=4) {
+                    if (pkt->getOffset(blkSize) + i < blkSize) {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data);
+                    } else {
+                        //hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
+                        break;
+                    }
+
+                }
+
+               }
+
+               // assert(try_cache_blk && try_cache_blk->data);
+
+           }
+       }
     //    // }
 
     //}

@@ -122,6 +122,8 @@ class Base : public ClockedObject
         ContextID cID;
         /** Pointer to the associated request data */
         uint8_t *data;
+        /** Whether this prefech fill generates new prefetch */
+        bool fill_trigger;
 
       public:
         /**
@@ -221,6 +223,11 @@ class Base : public ClockedObject
         ContextID getcID() const
         {
             return cID;
+        }
+        
+        bool isFillTrigger() const
+        {
+            return fill_trigger;
         }
 
         /**

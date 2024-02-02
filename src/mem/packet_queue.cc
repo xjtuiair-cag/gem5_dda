@@ -164,6 +164,7 @@ PacketQueue::schedSendEvent(Tick when)
     if (when != MaxTick) {
         // we cannot go back in time, and to be consistent we stick to
         // one tick in the future
+        //when = std::max(when, curTick() + clockPeriod());
         when = std::max(when, curTick() + 1);
         // @todo Revisit the +1
 

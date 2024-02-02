@@ -79,6 +79,9 @@ Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
     if (tag_vaddr) {
         pkt->req->setVaddr(pfInfo.getAddr() + (paddr - owner->blockAddress(paddr)));
     }
+    if (pfInfo.isFillTrigger()) {
+        pkt->fill_prefetch = true;
+    }
     tick = t;
 }
 
