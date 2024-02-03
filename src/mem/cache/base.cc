@@ -971,13 +971,13 @@ BaseCache::getNextQueueEntry()
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInCache(pkt);
                 
-                // CacheBlk* try_cache_blk = getCacheBlk(pkt->getAddr(), pkt->isSecure());
-                // if (try_cache_blk && try_cache_blk->data) {
-                //     prefetcher->hitTrigger(
-                //         pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr,
-                //         pkt->getAddr(), try_cache_blk->data
-                //     );
-                // }
+                CacheBlk* try_cache_blk = getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                if (try_cache_blk && try_cache_blk->data) {
+                    prefetcher->hitTrigger(
+                        pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr,
+                        pkt->getAddr(), try_cache_blk->data
+                    );
+                }
                 // free the request and packet
                 delete pkt;
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {

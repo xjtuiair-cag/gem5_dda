@@ -984,39 +984,40 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
     //if (pfi.isCacheMiss) { 
     //// DMP only observes DCache Miss (L2 Access), intent to reduce BranchPredMiss influence
 
-    //    // if (!pkt->req->isPrefetch()) {
+    // if (!pkt->req->isPrefetch()) {
 
         // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
         // When this called by ppHit->notify(), we use cache blk data to prefetch.
         CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
 
-       if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-           bool range_type = getRangeType(
-               pkt->req->getPC(), pkt->req->contextId()
-           );
+        if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+            bool range_type = getRangeType(
+                pkt->req->getPC(), pkt->req->contextId()
+            );
 
-           if (range_type) {
+            if (range_type) {
 
-               if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
-                   //notifyFill(pkt, try_cache_blk->data);
+                if (try_cache_blk != nullptr && try_cache_blk->data && pkt->req->hasPC()) {
+                    //notifyFill(pkt, try_cache_blk->data);
 
-                for (int i=0; ; i+=4) {
-                    if (pkt->getOffset(blkSize) + i < blkSize) {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data);
-                    } else {
-                        //hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
-                        break;
-                    }
+                    // for (int i=0; ; i+=4) {
+                    int i = 4;
+                        if (pkt->getOffset(blkSize) + i < blkSize) {
+                            hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data);
+                        } else {
+                            //hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data);
+                            // break;
+                        }
+
+                    // }
 
                 }
 
-               }
+                // assert(try_cache_blk && try_cache_blk->data);
 
-               // assert(try_cache_blk && try_cache_blk->data);
-
-           }
-       }
-    //    // }
+            }
+        }
+    // }
 
     //}
 

@@ -329,7 +329,7 @@ def config_cache(options, system):
 
             # enable VA for all prefetcher
             if options.l2_hwp_type:
-                system.l2.prefetcher.prefetch_on_access = True
+                system.l2.prefetcher.on_miss = False
                 system.l2.prefetcher.use_virtual_addresses = True
                 system.l2.prefetcher.tag_vaddr = True
                 system.l2.prefetcher.stats_pc_list = monitor_pc_list 
