@@ -8,8 +8,8 @@
 + FS mode required binaries [AArch64](https://www.gem5.org/documentation/general_docs/fullsystem/guest_binaries)
     + [Linux Kernel with Bootloader](http://dist.gem5.org/dist/v22-0/arm/aarch-system-20220707.tar.bz2)
     + [Linux Disk Images](http://dist.gem5.org/dist/v22-0/arm/disks/ubuntu-18.04-arm64-docker.img.bz2)
-+ executable workload, instrumented with gem5ops
-+ test scripts (eg. \*.rcS)
++ executable workload, instrumented with gem5ops (eg. spmv_csr.elf)
++ test scripts (eg. spmv_csr.rcS)
 
 ## Configuration
 + unzip aarch-system-20220707.tar.bz2
@@ -33,7 +33,7 @@ Example:
 sudo cp spmv_csr.elf as-caida_csr.mtx disk_mount_point_as_you_like/spmv/
 ```
 
-Config rcS with your workload path. Example *spmv_csr.rcS*
+Configurate rcS with your workload path. Example *spmv_csr.rcS*
 ```shell
 #!/bin/sh
 
@@ -43,17 +43,6 @@ cd /spmv
 echo "SpMV Done."
 
 /sbin/m5 exit
-```
-
-### [TEST ONLY] src modified
-Add potential index PC and targe PC to get matched in `src/mem/cache/prefetch/diff_matching.cc::28-39`. Instantiated and validated.
-
-Example:
-```C++
-    indexDataDeltaTable.emplace_back(0x400a28, 0, iddt_diff_num);
-    targetAddrDeltaTable.emplace_back(0x400a34, 0, tadt_diff_num);
-    indexDataDeltaTable[0].validate();
-    targetAddrDeltaTable[0].validate();
 ```
 
 ## Run
@@ -76,12 +65,26 @@ build/ARM/gem5.opt \
     --l1i_assoc 8 --l1d_assoc 8 --l2_assoc 16 --cacheline_size 64 \
     --l2_repl_policy LRURP \
     --l2-hwp-type DiffMatchingPrefetcher \
+    --dmp-init-bench spmv \
+    --dmp-notify l1 \
     --mem-type SimpleMemory --mem-size 8GB \
     --kernel=kernel_path \
     --bootloader=bootloader_path \
     --disk-image=disk_path \
-    --script=your_workload.rcS \
+    --script=spmv_csr.rcS \
 
 ```
 
+### Additional Options
+| Name | Description | Example |
+| --- | ------------ | ----- |
+| --dmp-init-bench | benchmark name for PC hint | spmv |
+| --dmp-notify | access cache level which trigger DMP | l1 |
+| --tlb-size | DTLB size | 65536 |
+| --stride-degree | degree for StridePrefetcher | 4 |
+| --dmp-range-ahead-dist | prefetch ahead number of continuous target pc address | 0 |
+| --dmp-indir-range | prefetch generating number from continuous index pc offset | 16 |
 
+### Checkpoints
+
+You can utilize checkpoint mechanism to speedup simulation. Keep *--tlb-size* consistent between cpt dumping and cpt restoring.

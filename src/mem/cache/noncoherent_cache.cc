@@ -313,6 +313,7 @@ NoncoherentCache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt,
 
     if (blk && !from_core && from_pref) {
         blk->setPrefetched();
+        blk->setPrefetchedAllocate();
     }
 
     // Reponses are filling and bring in writable blocks, therefore

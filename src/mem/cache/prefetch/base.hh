@@ -169,6 +169,7 @@ class Base : public ClockedObject
         void setPC(Addr pc_in)
         {
             pc = pc_in;
+            validPC = true;
         }
 
         /**
@@ -358,48 +359,64 @@ class Base : public ClockedObject
     struct StatGroup : public statistics::Group
     {
         StatGroup(statistics::Group *parent);
-        void regStatsPerPC(const std::vector<Addr> &PC_list);
-        /** HashMap used to record statsPerPC */
-        std::unordered_map<Addr, int> PCtoStatsIndex;
-        int max_per_pc;
+        void regStatsPerPC(const std::vector<Addr> &stats_pc_list);
 
         statistics::Scalar demandMshrMisses;
         statistics::Vector demandMshrMissesPerPC;
+        statistics::Scalar demandMshrHitsAtPf;
+        statistics::Vector demandMshrHitsAtPfPerPfPC;
         statistics::Scalar pfIssued;
-        statistics::Vector pfIssuedPerPC;
+        statistics::Vector pfIssuedPerPfPC;
         /** The number of times a HW-prefetched block is evicted w/o
          * reference. */
         statistics::Scalar pfUnused;
+        statistics::Vector pfUnusedPerPfPC;
         /** The number of times a HW-prefetch is useful. */
         statistics::Scalar pfUseful;
-        statistics::Vector pfUsefulPerPC;
+        statistics::Vector pfUsefulPerPfPC;
         /** The number of times there is a hit on prefetch but cache block
          * is not in an usable state */
         statistics::Scalar pfUsefulButMiss;
-        statistics::Formula accuracy;
-        statistics::Formula accuracyPerPC;
-        statistics::Formula timely_accuracy;
-        statistics::Formula timely_accuracy_perPC;
-        statistics::Formula coverage;
-        statistics::Formula coveragePerPC;
+        // statistics::Formula accuracy;
+        // statistics::Formula accuracyPerPC;
+        // statistics::Formula timely_accuracy;
+        // statistics::Formula timely_accuracy_perPfPC;
+        // statistics::Formula coverage;
+        // statistics::Formula coveragePerPC;
+        statistics::Formula pf_cosumed;
+        statistics::Formula pf_cosumed_perPfPC;
+        statistics::Formula pf_effective;
+        statistics::Formula pf_effective_perPfPC;
+        statistics::Formula pf_timely;
+        statistics::Formula pf_timely_perPfPC;
+        statistics::Formula accuracy_cache;
+        statistics::Formula accuracy_cache_perPfPC;
+        statistics::Formula accuracy_prefetcher;
+        statistics::Formula accuracy_prefetcher_perPfPC;
 
         /** The number of times a HW-prefetch hits in cache. */
         statistics::Scalar pfHitInCache;
-        statistics::Vector pfHitInCachePerPC;
+        statistics::Vector pfHitInCachePerPfPC;
 
         /** The number of times a HW-prefetch hits in a MSHR. */
         statistics::Scalar pfHitInMSHR;
-        statistics::Vector pfHitInMSHRPerPC;
+        statistics::Vector pfHitInMSHRPerPfPC;
 
         /** The number of times a HW-prefetch hits
          * in the Write Buffer (WB). */
         statistics::Scalar pfHitInWB;
-        statistics::Vector pfHitInWBPerPC;
+        statistics::Vector pfHitInWBPerPfPC;
 
         /** The number of times a HW-prefetch is late
          * (hit in cache, MSHR, WB). */
         statistics::Formula pfLate;
+        statistics::Formula pfLatePerPfPC;
+
+        statistics::Formula pfLateRate;
+        statistics::Formula pfLateRatePerPfPC;
     } prefetchStats;
+
+    std::vector<Addr> stats_pc_list;
 
     /** Total prefetches issued */
     uint64_t issuedPrefetches;
@@ -422,8 +439,8 @@ class Base : public ClockedObject
     virtual void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) = 0;
 
     /** Notify prefetcher of cache fill */
-    virtual void notifyFill(const PacketPtr &pkt)
-    {}
+    virtual void notifyFill(const PacketPtr &pkt) {}
+    virtual void notifyFill(const PacketPtr &pkt, const u_int8_t* data_ptr) {}
 
     // Probe AddrReq to L1 for prefetch detection
     virtual void notifyL1Req(const PacketPtr &pkt) {}
@@ -435,56 +452,92 @@ class Base : public ClockedObject
     virtual Tick nextPrefetchReadyTime() const = 0;
 
     void
-    prefetchUnused()
+    prefetchUnused(Addr pc)
     {
         prefetchStats.pfUnused++;
+
+        if (pc != MaxAddr) {
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (pc == stats_pc_list[i]) {
+                    prefetchStats.pfUnusedPerPfPC[i]++;
+                    break;
+                }
+            }
+        }
+    }
+
+    void incrDemandMshrHitsAtPf(Addr pc)
+    {
+        prefetchStats.demandMshrHitsAtPf++;
+
+        if (pc != MaxAddr) {
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (pc == stats_pc_list[i]) {
+                    prefetchStats.demandMshrHitsAtPfPerPfPC[i]++;
+                    break;
+                }
+            }
+        }
     }
 
     void
-    incrDemandMhsrMisses(Addr cause_pc = MaxAddr)
+    incrDemandMshrMisses(PacketPtr pkt)
     {
         prefetchStats.demandMshrMisses++;
-        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.demandMshrMissesPerPC[
-                prefetchStats.PCtoStatsIndex[cause_pc]
-                ]++;
+
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    prefetchStats.demandMshrMissesPerPC[i]++;
+                    break;
+                }
+            }
         }
     }
 
     void
-    pfHitInCache(Addr cause_pc = MaxAddr)
+    pfHitInCache(PacketPtr pkt)
     {
         prefetchStats.pfHitInCache++;
-        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.pfHitInCachePerPC[
-                prefetchStats.PCtoStatsIndex[cause_pc]
-                ]++;
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    prefetchStats.pfHitInCachePerPfPC[i]++;
+                    break;
+                }
+            }
         }
     }
 
     void
-    pfHitInMSHR(Addr cause_pc = MaxAddr)
+    pfHitInMSHR(PacketPtr pkt)
     {
         prefetchStats.pfHitInMSHR++;
-        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.pfHitInMSHRPerPC[
-                prefetchStats.PCtoStatsIndex[cause_pc]
-                ]++;
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    prefetchStats.pfHitInMSHRPerPfPC[i]++;
+                    break;
+                }
+            }
         }
     }
 
     void
-    pfHitInWB(Addr cause_pc = MaxAddr)
+    pfHitInWB(PacketPtr pkt)
     {
         prefetchStats.pfHitInWB++;
-        if (prefetchStats.PCtoStatsIndex.find(cause_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.pfHitInWBPerPC[
-                prefetchStats.PCtoStatsIndex[cause_pc]
-                ]++;
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    prefetchStats.pfHitInWBPerPfPC[i]++;
+                    break;
+                }
+            }
         }
     }
 

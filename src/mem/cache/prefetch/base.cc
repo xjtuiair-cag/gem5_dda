@@ -50,6 +50,7 @@
 #include "base/intmath.hh"
 #include "mem/cache/base.hh"
 #include "params/BasePrefetcher.hh"
+#include "debug/HWPrefetch.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -99,7 +100,10 @@ Base::PrefetchListener::notify(const PacketPtr &pkt)
     } else if (l1_resp) {
         parent.notifyL1Resp(pkt);
     } else if (isFill) {
-        parent.notifyFill(pkt);
+        assert(pkt->hasData());
+        assert(pkt->getSize() == parent.blkSize);
+        const uint8_t* fill_data_ptr = pkt->getConstPtr<u_int8_t>();
+        parent.notifyFill(pkt, fill_data_ptr);
     } else {
         parent.probeNotify(pkt, miss);
     }
@@ -117,6 +121,10 @@ Base::Base(const BasePrefetcherParams &p)
       prefetchStats(this), issuedPrefetches(0),
       usefulPrefetches(0), tlb(nullptr)
 {
+    if (!p.stats_pc_list.empty()) {
+        prefetchStats.regStatsPerPC(p.stats_pc_list);
+        stats_pc_list = p.stats_pc_list;
+    }
 }
 
 void
@@ -132,132 +140,232 @@ Base::setCache(BaseCache *_cache)
 
 Base::StatGroup::StatGroup(statistics::Group *parent)
   : statistics::Group(parent),
-    max_per_pc(64),
     ADD_STAT(demandMshrMisses, statistics::units::Count::get(),
         "demands not covered by prefetchs"),
     ADD_STAT(demandMshrMissesPerPC, statistics::units::Count::get(),
         "demands not covered by prefetchs"),
+    ADD_STAT(demandMshrHitsAtPf, statistics::units::Count::get(),
+        "demands hit in mshr allocated by prefetchs"),
+    ADD_STAT(demandMshrHitsAtPfPerPfPC, statistics::units::Count::get(),
+        "demands hit in mshr allocated by prefetchs"),
     ADD_STAT(pfIssued, statistics::units::Count::get(),
         "number of hwpf issued"),
-    ADD_STAT(pfIssuedPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfIssuedPerPfPC, statistics::units::Count::get(),
         "number of hwpf issued"),
     ADD_STAT(pfUnused, statistics::units::Count::get(),
              "number of HardPF blocks evicted w/o reference"),
+    ADD_STAT(pfUnusedPerPfPC, statistics::units::Count::get(),
+             "number of HardPF blocks evicted w/o reference"),
     ADD_STAT(pfUseful, statistics::units::Count::get(),
         "number of useful prefetch"),
-    ADD_STAT(pfUsefulPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfUsefulPerPfPC, statistics::units::Count::get(),
         "number of useful prefetch"),
     ADD_STAT(pfUsefulButMiss, statistics::units::Count::get(),
         "number of hit on prefetch but cache block is not in an usable "
         "state"),
-    ADD_STAT(accuracy, statistics::units::Count::get(),
-        "accuracy of the prefetcher"),
-    ADD_STAT(accuracyPerPC, statistics::units::Count::get(),
-        "accuracy of the prefetcher"),
-    ADD_STAT(timely_accuracy, statistics::units::Count::get(),
-        "timely accuracy of the prefetcher"),
-    ADD_STAT(timely_accuracy_perPC, statistics::units::Count::get(),
-        "timely accuracy of the prefetcher"),
-    ADD_STAT(coverage, statistics::units::Count::get(),
-    "coverage brought by this prefetcher"),
-    ADD_STAT(coveragePerPC, statistics::units::Count::get(),
-    "coverage brought by this prefetcher"),
+    // ADD_STAT(accuracy, statistics::units::Count::get(),
+    //     "accuracy of the prefetcher"),
+    // ADD_STAT(accuracyPerPC, statistics::units::Count::get(),
+    //     "accuracy of the prefetcher"),
+    // ADD_STAT(timely_accuracy, statistics::units::Count::get(),
+    //     "timely accuracy of the prefetcher"),
+    // ADD_STAT(timely_accuracy_perPfPC, statistics::units::Count::get(),
+    //     "timely accuracy of the prefetcher"),
+    // ADD_STAT(coverage, statistics::units::Count::get(),
+    // "coverage brought by this prefetcher"),
+    // ADD_STAT(coveragePerPC, statistics::units::Count::get(),
+    // "coverage brought by this prefetcher"),
+    ADD_STAT(pf_cosumed, statistics::units::Count::get(),
+        "pf_cosumed of the prefetcher"),
+    ADD_STAT(pf_cosumed_perPfPC, statistics::units::Count::get(),
+        "pf_cosumed of the prefetcher"),
+    ADD_STAT(pf_effective, statistics::units::Count::get(),
+        "pf_effective of the prefetcher"),
+    ADD_STAT(pf_effective_perPfPC, statistics::units::Count::get(),
+        "pf_effective of the prefetcher"),
+    ADD_STAT(pf_timely, statistics::units::Count::get(),
+        "pf_timely of the prefetcher"),
+    ADD_STAT(pf_timely_perPfPC, statistics::units::Count::get(),
+        "pf_timely of the prefetcher"),
+    ADD_STAT(accuracy_cache, statistics::units::Count::get(),
+        "accuracy_cache of the prefetcher"),
+    ADD_STAT(accuracy_cache_perPfPC, statistics::units::Count::get(),
+        "accuracy_cache of the prefetcher"),
+    ADD_STAT(accuracy_prefetcher, statistics::units::Count::get(),
+        "accuracy_prefetcher of the prefetcher"),
+    ADD_STAT(accuracy_prefetcher_perPfPC, statistics::units::Count::get(),
+        "accuracy_prefetcher of the prefetcher"),
     ADD_STAT(pfHitInCache, statistics::units::Count::get(),
         "number of prefetches hitting in cache"),
-    ADD_STAT(pfHitInCachePerPC, statistics::units::Count::get(),
+    ADD_STAT(pfHitInCachePerPfPC, statistics::units::Count::get(),
         "number of prefetches hitting in cache"),
     ADD_STAT(pfHitInMSHR, statistics::units::Count::get(),
         "number of prefetches hitting in a MSHR"),
-    ADD_STAT(pfHitInMSHRPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfHitInMSHRPerPfPC, statistics::units::Count::get(),
         "number of prefetches hitting in a MSHR"),
     ADD_STAT(pfHitInWB, statistics::units::Count::get(),
         "number of prefetches hit in the Write Buffer"),
-    ADD_STAT(pfHitInWBPerPC, statistics::units::Count::get(),
+    ADD_STAT(pfHitInWBPerPfPC, statistics::units::Count::get(),
         "number of prefetches hit in the Write Buffer"),
     ADD_STAT(pfLate, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLatePerPfPC, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLateRate, statistics::units::Count::get(),
+        "number of late prefetches (hitting in cache, MSHR or WB)"),
+    ADD_STAT(pfLateRatePerPfPC, statistics::units::Count::get(),
         "number of late prefetches (hitting in cache, MSHR or WB)")
 {
     using namespace statistics;
 
     pfUnused.flags(nozero);
 
-    timely_accuracy.flags(total);
-    timely_accuracy = pfUseful / pfIssued;
+    // timely_accuracy.flags(total);
+    // timely_accuracy = pfUseful / pfIssued;
 
-    coverage.flags(total | nonan );
-    coverage = pfUseful / (pfUseful + demandMshrMisses);
+    // coverage.flags(total | nonan );
+    // coverage = pfUseful / (pfUseful + demandMshrMisses);
 
     pfLate = pfHitInCache + pfHitInMSHR + pfHitInWB;
 
-    accuracy.flags(total | nonan);
-    accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
+    pfLateRate.flags(nozero | nonan);
+    pfLateRate = pfLate / pfIssued;
+
+    // accuracy.flags(total | nonan);
+    // accuracy = pfUseful / (pfIssued - pfHitInCache - pfHitInMSHR - pfHitInWB);
+
+    /* pf_cosumed = hwpf_mshr_miss / overall_mshr_miss */
+    pf_cosumed.flags(total | nonan);
+    pf_cosumed = (pfIssued - pfLate) / (pfIssued - pfLate + demandMshrMisses);
+
+    /* pf_effective = (pfUseful + demandMSHRHitAtPf) / hwpf_mshr_miss */
+    pf_effective.flags(total | nonan);
+    pf_effective = (pfUseful + demandMshrHitsAtPf) / (pfIssued - pfLate);
+
+    /* pf_timely = pfUseful / (pfUseful + demandMshrHitsAtPf) */
+    pf_timely.flags(total | nonan);
+    pf_timely = pfUseful / (pfUseful + demandMshrHitsAtPf);
+
+    /** NOTE: if pfLate, cache will reschedule memside's send event.
+     * If next ready time is later than curTick(), 
+     * cache will try schedule it at curTick()+1.
+     * So pfLate will not delay the timing of the whole cache, mostly.
+     */
+
+    /* accuracy_cache = pf_effective * pf_timely */
+    /*                = pfUseful / hwpf_mshr_miss            */
+    accuracy_cache.flags(total | nonan);
+    accuracy_cache = pfUseful / (pfIssued - pfLate);
+
+    /** NOTE: May unfair, since we don't know the prefetch part of pfUnused,
+     * not to mention how many of these are accuracy. 
+     * So ignore the pfUnused part.
+     */
+    accuracy_prefetcher.flags(total | nonan);
+    accuracy_prefetcher = (pfLate + pfUseful + demandMshrHitsAtPf) / pfIssued;
+
+    int max_per_pc = 32;
 
     demandMshrMissesPerPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
-    pfIssuedPerPC
-        .init(max_per_pc)
-        .flags(total | nozero | nonan)
-        ;
-    pfUsefulPerPC
-        .init(max_per_pc)
-        .flags(total | nozero | nonan)
-        ;
-    pfHitInCachePerPC
-        .init(max_per_pc)
-        .flags(total | nozero | nonan)
-        ;
-    pfHitInMSHRPerPC
-        .init(max_per_pc)
-        .flags(total | nozero | nonan)
-        ;
-    pfHitInWBPerPC
-        .init(max_per_pc)
-        .flags(total | nozero | nonan)
-        ;
-    accuracyPerPC.flags(nozero | nonan);
-    accuracyPerPC = pfUsefulPerPC / 
-        (pfIssuedPerPC - pfHitInCachePerPC - pfHitInMSHRPerPC - pfHitInWBPerPC);
 
-    timely_accuracy_perPC.flags(nozero | nonan);
-    timely_accuracy_perPC = pfUsefulPerPC / pfIssuedPerPC;
+    demandMshrHitsAtPfPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
 
-    coveragePerPC.flags(nozero | nonan);
-    coveragePerPC = pfUsefulPerPC / (pfUsefulPerPC + demandMshrMissesPerPC);
+    pfIssuedPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfUnusedPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfUsefulPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfHitInCachePerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfHitInMSHRPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    pfHitInWBPerPfPC
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    // accuracyPerPC.flags(nozero | nonan);
+    // accuracyPerPC = pfUsefulPerPfPC / 
+    //     (pfIssuedPerPfPC - pfHitInCachePerPfPC - pfHitInMSHRPerPfPC - pfHitInWBPerPfPC);
+
+    // timely_accuracy_perPfPC.flags(nozero | nonan);
+    // timely_accuracy_perPfPC = pfUsefulPerPfPC / pfIssuedPerPfPC;
+
+    // coveragePerPC.flags(nozero | nonan);
+    // coveragePerPC = pfUsefulPerPfPC / (pfUsefulPerPfPC + demandMshrMissesPerPC);
+
+    pfLatePerPfPC.flags(total | nozero | nonan);
+    pfLatePerPfPC = pfHitInCachePerPfPC + pfHitInMSHRPerPfPC + pfHitInWBPerPfPC;
+
+    pfLateRatePerPfPC.flags(nozero | nonan);
+    pfLateRatePerPfPC = pfLatePerPfPC / pfIssuedPerPfPC;
+
+    pf_cosumed_perPfPC.flags(total | nonan);
+    pf_cosumed_perPfPC = (pfIssuedPerPfPC - pfLatePerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC + demandMshrMissesPerPC);
+
+    pf_effective_perPfPC.flags(total | nonan);
+    pf_effective_perPfPC = (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC) / (pfIssuedPerPfPC - pfLatePerPfPC);
+
+    pf_timely_perPfPC.flags(total | nonan);
+    pf_timely_perPfPC = pfUsefulPerPfPC / (pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC);
+
+    accuracy_cache_perPfPC.flags(total | nonan);
+    accuracy_cache_perPfPC = pfUsefulPerPfPC / (pfIssuedPerPfPC - pfLatePerPfPC);
+
+    accuracy_prefetcher_perPfPC.flags(total | nonan);
+    accuracy_prefetcher_perPfPC = (pfLatePerPfPC + pfUsefulPerPfPC + demandMshrHitsAtPfPerPfPC) / pfIssuedPerPfPC;
 }
 
 void 
-Base::StatGroup::regStatsPerPC(const std::vector<Addr> &PC_list)
+Base::StatGroup::regStatsPerPC(const std::vector<Addr> &stats_pc_list)
 {
     using namespace statistics;
 
-    assert(!PC_list.empty());
-    assert(PCtoStatsIndex.empty());
-
-    int PC_list_len = PC_list.size();
-    assert(PC_list_len < max_per_pc);
-
+    int max_per_pc = 32;
+    assert(stats_pc_list.size() < max_per_pc);
     
-    for (int i = 0; i < PC_list_len; i++) {
-        if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
-
-        PCtoStatsIndex.insert({PC_list[i], i});
+    for (int i = 0; i < stats_pc_list.size(); i++) {
 
         std::stringstream stream;
-        stream << std::hex << PC_list[i];
+        stream << std::hex << stats_pc_list[i];
         std::string pc_name = stream.str();
 
         demandMshrMissesPerPC.subname(i, pc_name);
-        pfIssuedPerPC.subname(i, pc_name);
-        pfUsefulPerPC.subname(i, pc_name);
-        pfHitInCachePerPC.subname(i, pc_name);
-        pfHitInMSHRPerPC.subname(i, pc_name);
-        pfHitInWBPerPC.subname(i, pc_name);
+        demandMshrHitsAtPfPerPfPC.subname(i, pc_name);
+        pfIssuedPerPfPC.subname(i, pc_name);
+        pfUnusedPerPfPC.subname(i, pc_name); 
+        pfUsefulPerPfPC.subname(i, pc_name);
+        pfHitInCachePerPfPC.subname(i, pc_name);
+        pfHitInMSHRPerPfPC.subname(i, pc_name);
+        pfHitInWBPerPfPC.subname(i, pc_name);
 
-        accuracyPerPC.subname(i, pc_name);
-        timely_accuracy_perPC.subname(i, pc_name);
-        coveragePerPC.subname(i, pc_name);
+        // accuracyPerPC.subname(i, pc_name);
+        // timely_accuracy_perPfPC.subname(i, pc_name);
+        // coveragePerPC.subname(i, pc_name);
+        pfLatePerPfPC.subname(i, pc_name);
+        pfLateRatePerPfPC.subname(i, pc_name);
+
+        pf_cosumed_perPfPC.subname(i, pc_name);
+        pf_effective_perPfPC.subname(i, pc_name);
+        pf_timely_perPfPC.subname(i, pc_name);
+        accuracy_cache_perPfPC.subname(i, pc_name);
+        accuracy_prefetcher_perPfPC.subname(i, pc_name);
     }
 }
 
@@ -359,18 +467,31 @@ Base::probeNotify(const PacketPtr &pkt, bool miss)
         usefulPrefetches += 1;
         prefetchStats.pfUseful++;
 
-        Addr pkt_pc = pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr;
-        if (prefetchStats.PCtoStatsIndex.find(pkt_pc) != 
-            prefetchStats.PCtoStatsIndex.end()) {
-            prefetchStats.pfUsefulPerPC[
-                prefetchStats.PCtoStatsIndex[pkt_pc]
-                ]++;
+        Addr req_pc = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure())->getPC();
+        for (int i = 0; i < stats_pc_list.size(); i++) {
+            if (req_pc == stats_pc_list[i]) {
+                prefetchStats.pfUsefulPerPfPC[i]++;
+                break;
+            }
         }
+        // if (pkt->req->hasPC()) {
+        //     Addr req_pc = pkt->req->getPC();
+        //     for (int i = 0; i < stats_pc_list.size(); i++) {
+        //         if (req_pc == stats_pc_list[i]) {
+        //             prefetchStats.pfUsefulPerPfPC[i]++;
+        //             break;
+        //         }
+        //     }
+        // }
 
         if (miss)
             // This case happens when a demand hits on a prefetched line
             // that's not in the requested coherency state.
             prefetchStats.pfUsefulButMiss++;
+    }
+
+    if (!observeAccess(pkt, miss)) {
+        DPRINTF(HWPrefetch, "Prefetcher can't observe this access, dropped.\n");
     }
 
     // Verify this access type is observed by prefetcher

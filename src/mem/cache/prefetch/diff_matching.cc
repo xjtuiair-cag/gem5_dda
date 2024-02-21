@@ -21,7 +21,11 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rg_ent_num(p.rg_ent_num),
     ics_ent_num(p.ics_ent_num),
     rt_ent_num(p.rt_ent_num),
+    range_ahead_dist(p.range_ahead_dist),
     indir_range(p.indir_range),
+    notify_latency(p.notify_latency),
+    cur_range_priority(0),
+    range_group_size(p.range_group_size),
     iddt_diff_num(p.iddt_diff_num),
     tadt_diff_num(p.tadt_diff_num),
     indexDataDeltaTable(p.iddt_ent_num, iddt_ent_t(p.iddt_diff_num, false)),
@@ -42,10 +46,26 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     ics_candidate_num(p.ics_candidate_num),
     relationTable(p.rt_ent_num),
     rt_ptr(0),
-    statsDMP(this)
+    statsDMP(this),
+    pf_helper(nullptr)
 {
+    /**
+     * Priority Update Policy: 
+     * new range-type priority = cur.priority - range_group_size
+     * new single-type priority = parent_rte.priority + 1
+    */
+
+    // init cur_range_priority
+    cur_range_priority = std::numeric_limits<int32_t>::max();
+    cur_range_priority -= cur_range_priority % range_group_size;
+
+
     if (!p.auto_detect) {
-        std::vector<Addr> pc_list_for_stats;
+
+        /**
+         * Manual Mode
+        */
+        std::vector<Addr> pc_list;
 
         // init IDDT
         if (!p.index_pc_init.empty()) {
@@ -53,8 +73,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
                 indexDataDeltaTable[iddt_ptr].update(index_pc, 0, 0).validate();
                 iddt_ptr++;
             }
-            pc_list_for_stats.insert(
-                pc_list_for_stats.end(), p.index_pc_init.begin(), p.index_pc_init.end()
+            pc_list.insert(
+                pc_list.end(), p.index_pc_init.begin(), p.index_pc_init.end()
             );
         }
 
@@ -64,8 +84,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
                 targetAddrDeltaTable[tadt_ptr].update(target_pc, 0, 0).validate();
                 tadt_ptr++;
             }
-            pc_list_for_stats.insert(
-                pc_list_for_stats.end(), p.target_pc_init.begin(), p.target_pc_init.end()
+            pc_list.insert(
+                pc_list.end(), p.target_pc_init.begin(), p.target_pc_init.end()
             );
         }
 
@@ -77,10 +97,12 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
                     rg_ptr++;
                 }
             }
-
-            prefetchStats.regStatsPerPC(pc_list_for_stats);
-            statsDMP.regStatsPerPC(pc_list_for_stats);
         }
+
+        std::sort( pc_list.begin(), pc_list.end() );
+        pc_list.erase( std::unique( pc_list.begin(), pc_list.end() ), pc_list.end() );
+        statsDMP.regStatsPerPC(pc_list);
+        dmp_stats_pc = pc_list;
     }
 }
 
@@ -90,42 +112,45 @@ DiffMatching::~DiffMatching()
 
 DiffMatching::DMPStats::DMPStats(statistics::Group *parent)
     : statistics::Group(parent),
-    max_per_pc(64),
     ADD_STAT(dmp_pfIdentified, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified"),
-    ADD_STAT(dmp_pfIdentified_perPC, statistics::units::Count::get(),
+    ADD_STAT(dmp_pfIdentifiedPerPfPC, statistics::units::Count::get(),
+             "number of DMP prefetch candidates identified"),
+    ADD_STAT(dmp_noValidDataPerPC, statistics::units::Count::get(),
+             "number of DMP prefetch candidates identified"),
+    ADD_STAT(dmp_dataFill, statistics::units::Count::get(),
              "number of DMP prefetch candidates identified")
 {
     using namespace statistics;
+    
+    int max_per_pc = 32;
 
-    dmp_pfIdentified.flags(nozero | nonan);
-
-    dmp_pfIdentified_perPC 
+    dmp_pfIdentifiedPerPfPC 
+        .init(max_per_pc)
+        .flags(total | nozero | nonan)
+        ;
+    dmp_noValidDataPerPC
         .init(max_per_pc)
         .flags(total | nozero | nonan)
         ;
 }
 
 void
-DiffMatching::DMPStats::regStatsPerPC(const std::vector<Addr> PC_list)
+DiffMatching::DMPStats::regStatsPerPC(const std::vector<Addr>& stats_pc_list)
 {
     using namespace statistics;
 
-    assert(!PC_list.empty());
-    assert(PCtoStatsIndex.empty());
+    int max_per_pc = 32;
+    assert(stats_pc_list.size() < max_per_pc);
 
-    int PC_list_len = PC_list.size();
-
-    for (int i = 0; i < PC_list_len; i++) {
-        if (PCtoStatsIndex.find(PC_list[i]) != PCtoStatsIndex.end()) continue;
-
-        PCtoStatsIndex.insert({PC_list[i], i});
-
+    
+    for (int i = 0; i < stats_pc_list.size(); i++) {
         std::stringstream stream;
-        stream << std::hex << PC_list[i];
+        stream << std::hex << stats_pc_list[i];
         std::string pc_name = stream.str();
 
-        dmp_pfIdentified_perPC.subname(i, pc_name);
+        dmp_pfIdentifiedPerPfPC.subname(i, pc_name);
+        dmp_noValidDataPerPC.subname(i, pc_name);
     }
 }
 
@@ -416,17 +441,47 @@ DiffMatching::insertRT(
     assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
 
-    // get indexPC Range type, only matter when current indexPC as other pattern's target
-    bool new_range_type = false;
-    for (const auto& range_ent : rangeTable) {
-        if (range_ent.target_pc != new_index_pc || range_ent.cID != cID) continue;
+    /* get indexPC Range type */
+    bool new_range_type;
 
-        new_range_type = new_range_type || range_ent.getRangeType();
-    } 
+    // Stride PC should be classified as Range
+    // search for all requestor
+    if(pf_helper) {
+        new_range_type = pf_helper->checkStride(new_index_pc);
+    } else {
+        new_range_type = this->checkStride(new_index_pc);
+
+        // tmp: only for test
+        //new_range_type = true;
+    }
+
+    // try tadt's range detection
+    if (!new_range_type) {
+
+        // check rangeTable for range type
+        for (auto range_ent : rangeTable) {
+            if (range_ent.target_pc != new_index_pc || range_ent.cID != cID) continue;
+
+            new_range_type = new_range_type || range_ent.getRangeType();
+            
+            if (new_range_type == true) break; 
+        } 
+
+    }
+
+    /* get priority */
+    int32_t priority = 0;
+    if (new_range_type) {
+        priority = cur_range_priority;
+        cur_range_priority -= range_group_size;
+    } else {
+        priority = getPriority(new_index_pc, cID) + 1;
+        assert(priority % range_group_size > 0);
+    }
 
     DPRINTF(DMP, "Insert RelationTable: "
-        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d \n",
-        new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type
+        "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d priority %d\n",
+        new_index_pc, new_target_pc, target_base_addr, shift, cID, new_range_type, priority
     );
 
     relationTable[rt_ptr].update(
@@ -437,20 +492,54 @@ DiffMatching::insertRT(
         new_range_type, 
         indir_range, // TODO: dynamic detection
         cID,
-        true
+        true,
+        priority
     ).validate();
     rt_ptr = (rt_ptr+1) % rt_ent_num;
+}
+
+int32_t
+DiffMatching::getPriority(Addr pc_in, ContextID cID_in)
+{
+    int32_t priority = 0;
+    for (auto& rt_ent : relationTable) {
+        // if (!rt_ent.valid()) continue;
+
+        if (rt_ent.target_pc != pc_in) continue;
+
+        if (cID_in != -1 && rt_ent.cID != cID_in) continue;
+
+        priority = rt_ent.priority;
+        break;
+    }
+
+    return priority;
 }
 
 bool
 DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
 {
     // continuity check
+    // assert(target_PC == PC_in);
+
     Addr addr_shifted = addr_in >> shift_times;
 
-    if (addr_shifted == cur_tail + 1) {
+    // repeation check
+    if ((addr_shifted == cur_tail[0]) ||
+        (addr_shifted == cur_tail[1]) ||
+        (addr_shifted == cur_tail[2]) ) 
+    {
+        return false;
+    } 
+    
+    // continuity check
+    if (addr_shifted == cur_tail[0] + 1) {
         cur_count++;
-        cur_tail = addr_shifted;
+
+        cur_tail[2] = cur_tail[1];
+        cur_tail[1] = cur_tail[0];
+        cur_tail[0] = addr_shifted;
+
         return false;
     } 
 
@@ -467,7 +556,10 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
         cur_count = 0;
     }
 
-    cur_tail = addr_shifted;
+    cur_tail[2] = cur_tail[1];
+    cur_tail[1] = cur_tail[0];
+    cur_tail[0] = addr_shifted;
+
     return true;
 }
 
@@ -520,9 +612,6 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
         if (target_pc != pkt->req->getPC() || !tadt_ent.isValid()) continue;
         assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
-        // repeation check
-        if (tadt_ent.getLast() == req_addr) continue;
-
         // range check
         if (!rangeFilter(target_pc, req_addr, 
                         pkt->req->hasContextId() ? pkt->req->contextId() : 0))
@@ -543,6 +632,7 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
 
         // try matching
         if (tadt_ent.isReady()) {
+            DPRINTF(DMP, "try diffMatching for target PC: %llx\n", target_pc);
             diffMatching(tadt_ent);
         }
     }
@@ -588,7 +678,7 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
             std::memcpy(&new_data, &resp_data, sizeof(int64_t));
 
             // repeation check
-            if (iddt_ent.getLast() == new_data) continue;
+            // if (iddt_ent.getLast() == new_data) continue;
 
             DPRINTF(DMP, "notifyL1Resp: [filter pass] PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
                                 pkt->req->getPC(), pkt->req->getPaddr(), 
@@ -606,7 +696,7 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
 }
 
 void
-DiffMatching::notifyFill(const PacketPtr &pkt)
+DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
 {
     /** use virtual address for prefetch */
     assert(tlb != nullptr);
@@ -619,13 +709,20 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
     if (!pkt->validData()) {
         DPRINTF(HWPrefetch, "notifyFill: PC %llx, PAddr %llx, no Data, %s\n", 
                     pkt->req->getPC(), pkt->req->getPaddr(), pkt->cmdString());
+        statsDMP.dmp_noValidData++;
+        for (int i = 0; i < dmp_stats_pc.size(); i++) {
+            Addr req_pc = pkt->req->getPC();
+            if (req_pc == dmp_stats_pc[i]) {
+                statsDMP.dmp_noValidDataPerPC[i]++;
+                break;
+            }
+        }
         return;
     }
 
     /* get response data */
-    assert(pkt->getSize() <= blkSize); 
     uint8_t fill_data[blkSize];
-    pkt->writeData(fill_data); 
+    std::memcpy(fill_data, data_ptr, blkSize);
 
     /* prinf response data in bytes */
     if (debug::HWPrefetch) {
@@ -651,7 +748,6 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
         /* Assume response data is a int and always occupies 4 bytes */
         const int data_stride = 4;
         const int byte_width = 8;
-        const int32_t priority = 0;
 
         /* set range_end, only process one data if not range type */
         unsigned range_end;
@@ -673,76 +769,83 @@ DiffMatching::notifyFill(const PacketPtr &pkt)
             }
 
             /* calculate target prefetch address */
-            Addr pf_addr = blockAddress((resp_data << rt_ent.shift) + rt_ent.target_base_addr);
+            Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
             DPRINTF(HWPrefetch, 
                     "notifyFill: PC %llx, pkt_addr %llx, pkt_offset %d, pkt_data %d, pf_addr %llx\n", 
                     pc, pkt->getAddr(), data_offset, resp_data, pf_addr);
 
-            /** get a fake pfi, generator pc is target_pc for chain-trigger */
-            PrefetchInfo fake_pfi(
-                pf_addr, rt_ent.target_pc, requestorId,
-                pkt->req->hasContextId() ? pkt->req->contextId() : 0 
-            );
+            // insert to missing translation queue
+            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
             
-            /* filter repeat request */
-            if (queueFilter) {
-                if (alreadyInQueue(pfq, fake_pfi, priority)) {
-                    /* repeat address in pfi */
-                    continue;
+            if (rt_ent.target_pc == 0x400ca0) {
+                for (int i = 1; i <= range_ahead_dist; i++) {
+                    insertIndirectPrefetch(pf_addr + blkSize * i, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
                 }
-                if (alreadyInQueue(pfqMissingTranslation, fake_pfi, priority)) {
-                    /* repeat address in pfi */
-                    continue;
-                }
-            }
-
-            /* create pkt and req for dpp, fake for later translation*/
-            DeferredPacket dpp(this, fake_pfi, 0, priority);
-
-            Tick pf_time = curTick() + clockPeriod() * latency;
-            dpp.createPkt(pf_addr, blkSize, requestorId, true, pf_time);
-            dpp.pkt->req->setPC(rt_ent.target_pc);
-            dpp.pfInfo.setPC(rt_ent.target_pc);
-            dpp.pfInfo.setAddr(pf_addr);
-
-            /* make translation request and set PREFETCH flag*/
-            RequestPtr translation_req = std::make_shared<Request>(
-                pf_addr, blkSize, dpp.pkt->req->getFlags(), requestorId, 
-                rt_ent.target_pc, rt_ent.cID);
-            translation_req->setFlags(Request::PREFETCH);
-
-            /* set to-be-translating request, append to pfqMissingTranslation*/
-            dpp.setTranslationRequest(translation_req);
-            dpp.tc = cache->system->threads[translation_req->contextId()];
-
-            addToQueue(pfqMissingTranslation, dpp);
-            statsDMP.dmp_pfIdentified++;
-            if (statsDMP.PCtoStatsIndex.find(rt_ent.target_pc) != 
-                statsDMP.PCtoStatsIndex.end()) {
-                statsDMP.dmp_pfIdentified_perPC[
-                    statsDMP.PCtoStatsIndex[rt_ent.target_pc]
-                    ]++;
             }
         }
 
         // try to do translation immediately
         processMissingTranslations(queueSize - pfq.size());
     }
+
+    statsDMP.dmp_dataFill++;
+}
+
+void 
+DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID, int32_t priority)
+{
+    Addr blk_pf_addr = blockAddress(pf_addr);
+
+    /** get a fake pfi, generator pc is target_pc for chain-trigger */
+    /** use blk-aligned address for repeation check in PFQ */
+    PrefetchInfo fake_pfi(blk_pf_addr, target_pc, requestorId, cID);
+    
+    statsDMP.dmp_pfIdentified++;
+    for (int i = 0; i < dmp_stats_pc.size(); i++) {
+        if (target_pc == dmp_stats_pc[i]) {
+            statsDMP.dmp_pfIdentifiedPerPfPC[i]++;
+            break;
+        }
+    }
+
+    /* filter repeat request */
+    if (queueFilter) {
+        if (alreadyInQueue(pfq, fake_pfi, priority)) {
+            /* repeat address in pfi */
+            return;
+        }
+        if (alreadyInQueue(pfqMissingTranslation, fake_pfi, priority)) {
+            /* repeat address in pfi */
+            return;
+        }
+    }
+
+    /* create pkt and req for dpp, fake for later translation*/
+    DeferredPacket dpp(this, fake_pfi, 0, priority);
+
+    /* no need trigger virtual addr for DMP */
+    dpp.pfInfo.setPC(target_pc); // setting target pc
+    dpp.pfInfo.setAddr(blk_pf_addr); // setting target virtual addr, blk-aligned
+
+    // TODO: should set ContextID
+
+    /* make translation request and set PREFETCH flag*/
+    RequestPtr translation_req = std::make_shared<Request>(
+        pf_addr, blkSize, Request::PREFETCH, requestorId, 
+        target_pc, cID);
+
+    /* set to-be-translating request, append to pfqMissingTranslation*/
+    dpp.setTranslationRequest(translation_req);
+    dpp.tc = cache->system->threads[translation_req->contextId()];
+
+    // pf_time will not be set until translation completes
+
+    addToQueue(pfqMissingTranslation, dpp);
 }
 
 void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
-    //if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-    //    for (auto& rt_ent: relationTable) { 
-    //        if (rt_ent.index_pc == pkt->req->getPC())
-    //        {
-    //            rt_ent.cID = pkt->req->contextId();
-    //        }
-    //    }
-    //    // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
-    //}
-    
     if (pfi.isCacheMiss()) {
         // Miss
         DPRINTF(HWPrefetch, "notify::CacheMiss: PC %llx, Addr %llx, PAddr %llx, VAddr %llx\n", 
@@ -763,9 +866,43 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                             pkt->getAddr(), 
                             pkt->req->getPaddr(), 
                             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
-
-        notifyFill(pkt); 
     }
+    // if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+    //     for (auto& rt_ent: relationTable) { 
+    //         if (rt_ent.index_pc == pkt->req->getPC())
+    //         {
+    //             rt_ent.cID = pkt->req->contextId();
+    //         }
+    //     }
+    //     // DPRINTF(HWPrefetch, "notify: Request Flags %llx ContextID %d\n", pkt->req->getFlags(), pkt->req->contextId());
+    // }
+
+    assert(pkt->isRequest());
+
+    // TODO: Should we do further prefetch for high level cache prefetch ?
+    // e.g. L1 Prefetch Request access and hit at L2.
+    // currently L1 HWPrefetch Request will be translated to ReadShared request at L2.
+
+    //if (!pkt->req->isPrefetch()) {
+        // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
+        // When this called by ppHit->notify(), we use cache blk data to prefetch.
+        CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+        // assert(try_cache_blk && try_cache_blk->data);
+
+        if (try_cache_blk != nullptr && try_cache_blk->data) {
+            notifyFill(pkt, try_cache_blk->data);
+        }
+    //}
+
+        // CacheBlk* try_miss_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+
+        // if (try_miss_blk != nullptr) {
+        //     assert(try_miss_blk && try_miss_blk->data);
+        //     notifyFill(pkt, try_miss_blk->data);
+
+        //     DPRINTF(HWPrefetch, "notify:: Hit at prefetcher's cache, try DMP prefetch.\n");
+        // }
 
     Queued::notify(pkt, pfi);
 }
@@ -782,9 +919,34 @@ DiffMatching::callReadytoIssue(const PrefetchInfo& pfi)
 }
 
 void
+DiffMatching::addPfHelper(Stride* s)
+{
+    fatal_if(pf_helper != nullptr, "Only one PfHelper can be registered");
+    pf_helper = s;
+}
+
+void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {
-    Stride::calculatePrefetch(pfi, addresses);
+    if (pf_helper) {
+        // use fake_addresses to drop Stride Prefetch while keep updating pcTables
+        std::vector<AddrPriority> fake_addresses;
+
+        Stride::calculatePrefetch(pfi, fake_addresses);
+    } else {
+        Stride::calculatePrefetch(pfi, addresses);
+    }
+
+    // set priority for stride prefetch
+    // in case the stride pc is the same as rt_ent's target pc
+    int32_t priority = 0;
+    if (pfi.hasPC()) {
+        priority = getPriority(pfi.getPC(), -1);
+    }
+
+    for (auto& addr : addresses) {
+        addr.second = priority;
+    }
 }
 
 } // namespace prefetch

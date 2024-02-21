@@ -37,7 +37,14 @@ class DiffMatching : public Stride
     const int rt_ent_num;
 
     // indirect range prefetch length
+    int range_ahead_dist;
     int indir_range;
+
+    int notify_latency;
+
+    // priority init
+    int32_t cur_range_priority;
+    int32_t range_group_size;
 
     // possiable shift values
     const unsigned int shift_v[4] = {0, 1, 2, 3};
@@ -153,7 +160,7 @@ class DiffMatching : public Stride
     struct RangeTableEntry
     {
         Addr target_pc; // range base on req address
-        Addr cur_tail;
+        Addr cur_tail[3];
         int cur_count;
         ContextID cID;
         bool valid;
@@ -170,8 +177,8 @@ class DiffMatching : public Stride
         // normal constructor
         RangeTableEntry(
                 Addr target_pc, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_pc(target_pc), cur_tail(req_addr), cur_count(0), 
-                cID(0), valid(false), shift_times(shift_times), 
+            ) : target_pc(target_pc), cur_tail{req_addr, MaxAddr, MaxAddr}, 
+                cur_count(0), cID(0), valid(false), shift_times(shift_times), 
                 range_quant_unit(rqu), range_quant_level(rql), 
                 sample_count(rql) {}
 
@@ -205,7 +212,9 @@ class DiffMatching : public Stride
             ContextID cID_in
         ) {
             target_pc = target_pc_in;
-            cur_tail =  req_addr_in;
+            cur_tail[0] =  req_addr_in;
+            cur_tail[1] = MaxAddr;
+            cur_tail[2] = MaxAddr;
             cur_count = 0;
             cID = cID_in;
             valid = false;
@@ -333,13 +342,17 @@ class DiffMatching : public Stride
         int range_degree;
         ContextID cID;
         bool valid;
+        int32_t priority;
 
         // normal constructor
         RTEntry(
             Addr index_pc, Addr target_pc, Addr target_base_addr, 
-            unsigned int shift, bool range, int range_degree, ContextID cID
+            unsigned int shift, bool range, int range_degree, 
+            ContextID cID, int32_t priority
         ) : index_pc(index_pc), target_pc(target_pc), target_base_addr(target_base_addr),
-            shift(shift), range(range), range_degree(range_degree), cID(cID), valid(false) {}
+            shift(shift), range(range), range_degree(range_degree), cID(cID), valid(false),
+            priority(priority)
+            {}
 
         // default constructor
         RTEntry(bool valid = false) : valid(valid) {};
@@ -357,7 +370,8 @@ class DiffMatching : public Stride
             bool range_in,
             int range_degree_in,
             ContextID cID_in,
-            bool valid_in
+            bool valid_in,
+            int32_t priority_in
         ) {
             index_pc = index_pc_in;
             target_pc = target_pc_in;
@@ -367,6 +381,7 @@ class DiffMatching : public Stride
             range_degree = range_degree_in;
             cID = cID_in;
             valid = valid_in;
+            priority = priority_in;
             
             return *this;
         };
@@ -383,20 +398,27 @@ class DiffMatching : public Stride
         int iddt_match_point, unsigned int shift, ContextID cID
     );
 
+    int32_t getPriority(Addr target_pc, ContextID cID);
+
 
     /** DMP specific stats */
     struct DMPStats : public statistics::Group
     {
         DMPStats(statistics::Group *parent);
-        void regStatsPerPC(const std::vector<Addr> PC_list);
-        /** HashMap used to record statsPerPC */
-        std::unordered_map<Addr, int> PCtoStatsIndex;
-        int max_per_pc;
+        void regStatsPerPC(const std::vector<Addr>& PC_list);
+
         // STATS
         statistics::Scalar dmp_pfIdentified;
-        statistics::Vector dmp_pfIdentified_perPC;
+        statistics::Vector dmp_pfIdentifiedPerPfPC;
+        statistics::Scalar dmp_noValidData;
+        statistics::Vector dmp_noValidDataPerPC;
+        statistics::Scalar dmp_dataFill;
     } statsDMP;
 
+    std::vector<Addr> dmp_stats_pc;
+
+    // A StridePrefetcher which helps DMP detection.
+    Stride* pf_helper;
 
     /** DMP functions */
 
@@ -412,14 +434,19 @@ class DiffMatching : public Stride
 
     // Base notify for Cache access (Hit or Miss)
     void notify(const PacketPtr &pkt, const PrefetchInfo &pfi) override;
-    
+
     // Probe DataResp from Memory for prefetch generation
-    void notifyFill(const PacketPtr &pkt) override;
+    void notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr) override;
 
     // Probe AddrReq to L1 for prefetch detection
     void notifyL1Req(const PacketPtr &pkt) override;
     // Probe DataResp from L1 for prefetch detection
     void notifyL1Resp(const PacketPtr &pkt) override;
+
+    void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, 
+                                ContextID cID, int32_t priority);
+
+    void addPfHelper(Stride* s);
 
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;

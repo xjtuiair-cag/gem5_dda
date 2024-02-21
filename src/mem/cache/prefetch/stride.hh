@@ -167,6 +167,8 @@ class Stride : public Queued
   public:
     Stride(const StridePrefetcherParams &p);
 
+    bool checkStride(Addr addr) const;
+
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses) override;
 };

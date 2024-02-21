@@ -1015,9 +1015,18 @@ class BaseCache : public ClockedObject
         /** Number of hits per thread for each type of command.
             @sa Packet::Command */
         statistics::Vector hits;
+        statistics::Vector hitsPerPC;
+
+        statistics::Vector hitsAtPf;
+        statistics::Vector hitsAtPfPerPC;
+
+        statistics::Vector hitsAtPfAlloc;
+        statistics::Vector hitsAtPfAllocPerPC;
+
         /** Number of misses per thread for each type of command.
             @sa Packet::Command */
         statistics::Vector misses;
+        statistics::Vector missesPerPC;
         /**
          * Total number of ticks per thread/command spent waiting for a hit.
          * Used to calculate the average hit latency.
@@ -1030,16 +1039,23 @@ class BaseCache : public ClockedObject
         statistics::Vector missLatency;
         /** The number of accesses per command and thread. */
         statistics::Formula accesses;
+        statistics::Formula accessesPerPC;
         /** The miss rate per command and thread. */
         statistics::Formula missRate;
         /** The average miss latency per command and thread. */
         statistics::Formula avgMissLatency;
         /** Number of misses that hit in the MSHRs per command and thread. */
         statistics::Vector mshrHits;
+        statistics::Vector mshrHitsPerPC;
+        /** Number of MSHR Hit which was allocated by prefetch*/
+        statistics::Vector mshrHitsAtPf;
+        statistics::Vector mshrHitsAtPfPerPC;
         /** Number of misses that miss in the MSHRs, per command and thread. */
         statistics::Vector mshrMisses;
+        statistics::Vector mshrMissesPerPC;
         /** Number of misses that miss in the MSHRs, per command and thread. */
         statistics::Vector mshrUncacheable;
+        statistics::Vector mshrUncacheablePerPC;
         /** Total tick latency of each MSHR miss, per command and thread. */
         statistics::Vector mshrMissLatency;
         /** Total tick latency of each MSHR miss, per command and thread. */
@@ -1066,6 +1082,22 @@ class BaseCache : public ClockedObject
 
         /** Number of hits for demand accesses. */
         statistics::Formula demandHits;
+        statistics::Formula demandHitsPerPC;
+        statistics::Formula demandHitsAtPf;
+        statistics::Formula demandHitsAtPfPerPC;
+
+        statistics::Formula demandHitsAtPfAlloc;
+        statistics::Formula demandHitsAtPfAllocPerPC;
+
+        statistics::Formula hitsAtPfCoverAccess;
+        statistics::Formula hitsAtPfCoverAccessPerPC;
+
+        statistics::Formula hitsAtPfAllocCoverAccess;
+        statistics::Formula hitsAtPfAllocCoverAccessPerPC;
+
+        statistics::Formula hitsPfRatio;
+        statistics::Formula hitsPfRatioPerPC;
+
         /** Number of hit for all accesses. */
         statistics::Formula overallHits;
         /** Total number of ticks spent waiting for demand hits. */
@@ -1075,6 +1107,7 @@ class BaseCache : public ClockedObject
 
         /** Number of misses for demand accesses. */
         statistics::Formula demandMisses;
+        statistics::Formula demandMissesPerPC;
         /** Number of misses for all accesses. */
         statistics::Formula overallMisses;
 
@@ -1085,11 +1118,13 @@ class BaseCache : public ClockedObject
 
         /** The number of demand accesses. */
         statistics::Formula demandAccesses;
+        statistics::Formula demandAccessesPerPC;
         /** The number of overall accesses. */
         statistics::Formula overallAccesses;
 
         /** The miss rate of all demand accesses. */
         statistics::Formula demandMissRate;
+        statistics::Formula demandMissRatePerPC;
         /** The miss rate for all accesses. */
         statistics::Formula overallMissRate;
 
@@ -1111,11 +1146,17 @@ class BaseCache : public ClockedObject
 
         /** Demand misses that hit in the MSHRs. */
         statistics::Formula demandMshrHits;
+        statistics::Formula demandMshrHitsPerPC;
         /** Total number of misses that hit in the MSHRs. */
         statistics::Formula overallMshrHits;
 
+        /** Number of MSHR Hit which was allocated by prefetch*/
+        statistics::Formula demandMshrHitsAtPf;
+        statistics::Formula demandMshrHitsAtPfPerPC;
+
         /** Demand misses that miss in the MSHRs. */
         statistics::Formula demandMshrMisses;
+        statistics::Formula demandMshrMissesPerPC;
         /** Total number of misses that miss in the MSHRs. */
         statistics::Formula overallMshrMisses;
 
@@ -1158,6 +1199,8 @@ class BaseCache : public ClockedObject
         /** Per-command statistics */
         std::vector<std::unique_ptr<CacheCmdStats>> cmd;
     } stats;
+
+    std::vector<Addr> stats_pc_list;
 
     /** Registers probes. */
     void regProbePoints() override;
@@ -1293,6 +1336,10 @@ class BaseCache : public ClockedObject
         return tags->findBlock(addr, is_secure);
     }
 
+    CacheBlk* getCacheBlk(Addr addr, bool is_secure) const {
+        return tags->findBlock(addr, is_secure);
+    }
+
     bool hasBeenPrefetched(Addr addr, bool is_secure) const {
         CacheBlk *block = tags->findBlock(addr, is_secure);
         if (block) {
@@ -1316,11 +1363,53 @@ class BaseCache : public ClockedObject
             if (missCount == 0)
                 exitSimLoop("A cache reached the maximum miss count");
         }
+
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+                if (req_pc == stats_pc_list[i]) {
+                    stats.cmdStats(pkt).missesPerPC[i]++;
+                    break;
+                }
+            }
+        }
     }
     void incHitCount(PacketPtr pkt)
     {
+        CacheBlk* blk = tags->findBlock(pkt->getAddr(), pkt->isSecure()); 
+
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(pkt).hits[pkt->req->requestorId()]++;
+
+        if (prefetcher && blk->wasPrefetched()) {
+            stats.cmdStats(pkt).hitsAtPf[pkt->req->requestorId()]++;
+        }
+
+        if (prefetcher && blk->fromPrefetched()) {
+            stats.cmdStats(pkt).hitsAtPfAlloc[pkt->req->requestorId()]++;
+        }
+
+        if (pkt->req->hasPC()) {
+            Addr req_pc = pkt->req->getPC();
+            for (int i = 0; i < stats_pc_list.size(); i++) {
+
+                if (req_pc == stats_pc_list[i]) {
+
+                    stats.cmdStats(pkt).hitsPerPC[i]++;
+
+                    if (prefetcher && blk->wasPrefetched()) {
+                        stats.cmdStats(pkt).hitsAtPfPerPC[i]++;
+                    }
+
+                    if (prefetcher && blk->fromPrefetched()) {
+                        stats.cmdStats(pkt).hitsAtPfAllocPerPC[i]++;
+                    }
+
+                    break;
+                }
+            }
+        }
+
     }
 
     /**
