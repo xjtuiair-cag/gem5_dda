@@ -213,6 +213,7 @@ DiffMatching::notifyICSMiss(Addr miss_addr, Addr miss_pc_in, ContextID cID_in)
 
         if (ics_ent.cID != cID_in) continue;
 
+        DPRINTF(DMP, "ICS updateMiss: targetPC %llx Addr %llx cID %d\n", miss_pc_in, miss_addr, cID_in);
         if (ics_ent.updateMiss(miss_pc_in, ics_candidate_num)) {
             // try insert new entry to TADT and RangeTable
             // IDDT entry should be inserted by IndexQueue
@@ -751,7 +752,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0);
         notifyICSMiss(
             pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
-            pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
+            pkt->req->hasPC() ? pkt->req->getPC() : 0x0,
             pkt->req->hasContextId () ? pkt->req->contextId() : 0
         );        
 

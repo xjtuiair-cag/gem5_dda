@@ -93,8 +93,8 @@ class DiffMatching : public Stride
             if (cID_in != cID) return;
 
             if (ready) {
-                diff_ptr = (diff_ptr+1) % diff_size;
                 diff[diff_ptr] = last_in - last;
+                diff_ptr = (diff_ptr+1) % diff_size;
             } else {
                 diff.push_back(last_in - last);
                 if (diff.size() == diff_size) ready = true;

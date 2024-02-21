@@ -274,7 +274,7 @@ def config_cache(options, system):
 
                 system.l2.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
-                system.l2.prefetcher.auto_detect = False
+                system.l2.prefetcher.auto_detect = True
 
                 if options.dmp_init_bench:
                     system.l2.prefetcher.index_pc_init = \
