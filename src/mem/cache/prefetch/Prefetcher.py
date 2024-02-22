@@ -711,9 +711,6 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     iddt_ent_num = Param.Unsigned(8, "Number of entries of iddt")
     ics_ent_num = Param.Unsigned(8, "Number of entries of ics")
 
-    ics_candicate_num = Param.Unsigned(
-        16, "Number of candicate target PC of each ics entry"
-    )
     tadt_ent_num = Param.Unsigned(16, "Number of entries of tadt")
     rg_ent_num = Param.Unsigned(16, "Number of entries of RangeTable") 
 
@@ -723,10 +720,10 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     detect_period = Param.Unsigned(1000, "Cycles between index pc choosing")
 
     iddt_diff_num = Param.Unsigned(8, "Number of difference entries of iddt")
-    tadt_diff_num = Param.Unsigned(3, "Number of difference entries of tadt")
+    tadt_diff_num = Param.Unsigned(5, "Number of difference entries of tadt")
 
     ics_miss_threshold = Param.Unsigned(6, "Number of candidate pc miss threshold")
-    ics_candidate_num = Param.Unsigned(8, "Number of candidate target in ics")
+    ics_candidate_num = Param.Unsigned(3, "Number of candidate target in ics")
     range_group_size = Param.Unsigned(256, "Number of relations in each range group")
 
     stream_ahead_dist = Param.Unsigned(

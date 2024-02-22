@@ -160,7 +160,7 @@ class DiffMatching : public Stride
     struct RangeTableEntry
     {
         Addr target_pc; // range base on req address
-        Addr cur_tail[3];
+        Addr cur_tail[2];
         int cur_count;
         ContextID cID;
         bool valid;
@@ -177,7 +177,7 @@ class DiffMatching : public Stride
         // normal constructor
         RangeTableEntry(
                 Addr target_pc, Addr req_addr, int shift_times, int rql, int rqu
-            ) : target_pc(target_pc), cur_tail{req_addr, MaxAddr, MaxAddr}, 
+            ) : target_pc(target_pc), cur_tail{req_addr, MaxAddr}, 
                 cur_count(0), cID(0), valid(false), shift_times(shift_times), 
                 range_quant_unit(rqu), range_quant_level(rql), 
                 sample_count(rql) {}
@@ -214,7 +214,6 @@ class DiffMatching : public Stride
             target_pc = target_pc_in;
             cur_tail[0] =  req_addr_in;
             cur_tail[1] = MaxAddr;
-            cur_tail[2] = MaxAddr;
             cur_count = 0;
             cID = cID_in;
             valid = false;

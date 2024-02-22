@@ -340,7 +340,7 @@ DiffMatching::insertRG(Addr req_addr_in, Addr target_pc_in, ContextID cID_in)
         rangeTable[rg_ptr].update(
             target_pc_in, req_addr_in, shift_try, cID_in
         ).validate();
-        rg_ptr = (rg_ptr+1) % rg_ent_num;
+        rg_ptr = (rg_ptr+1) % (rg_ent_num * 4);
     }
 
     DPRINTF(DMP, "insert RG: targetPC %llx cID %d\n", target_pc_in, cID_in);
@@ -525,9 +525,7 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
     Addr addr_shifted = addr_in >> shift_times;
 
     // repeation check
-    if ((addr_shifted == cur_tail[0]) ||
-        (addr_shifted == cur_tail[1]) ||
-        (addr_shifted == cur_tail[2]) ) 
+    if (addr_shifted == cur_tail[0] || addr_shifted == cur_tail[1])
     {
         return false;
     } 
@@ -536,7 +534,6 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
     if (addr_shifted == cur_tail[0] + 1) {
         cur_count++;
 
-        cur_tail[2] = cur_tail[1];
         cur_tail[1] = cur_tail[0];
         cur_tail[0] = addr_shifted;
 
@@ -556,7 +553,6 @@ DiffMatching::RangeTableEntry::updateSample(Addr addr_in)
         cur_count = 0;
     }
 
-    cur_tail[2] = cur_tail[1];
     cur_tail[1] = cur_tail[0];
     cur_tail[0] = addr_shifted;
 
@@ -658,22 +654,28 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
         return;
     }
 
-    assert(pkt->getSize() <= blkSize); 
-    uint8_t data[pkt->getSize()];
-    pkt->writeData(data); 
-
-    const int data_stride = 4;
+    /** 
+     * NOTE: assume the max length of resp data is 8 byte (int64)
+     * Since pkt only keeps the data which req needs, we should 
+     * parse all data. 
+    **/
+    const int data_stride = 8;
     const int byte_width = 8;
-    uint64_t resp_data = 0;
-    for (int i_st = data_stride-1; i_st >= 0; i_st--) {
-        resp_data = resp_data << byte_width;
-        resp_data += static_cast<uint64_t>(data[i_st]);
-    }
-    assert(resp_data <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
     // update IDDT
     for (auto& iddt_ent: indexDataDeltaTable) {
         if (iddt_ent.getPC() == pkt->req->getPC() && iddt_ent.isValid()) {
+
+            assert(pkt->getSize() <= 8); 
+            uint8_t data[8] = {0};
+            pkt->writeData(data); 
+            uint64_t resp_data = 0;
+            for (int i_st = data_stride-1; i_st >= 0; i_st--) {
+                resp_data = resp_data << byte_width;
+                resp_data += static_cast<uint64_t>(data[i_st]);
+            }
+            assert(resp_data <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+
             IndexData new_data;
             std::memcpy(&new_data, &resp_data, sizeof(int64_t));
 
@@ -689,10 +691,10 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
         }
     }
 
-    DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
-                        pkt->req->getPC(), pkt->req->getPaddr(), 
-                        pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
-                        pkt->getSize(), resp_data);
+    // DPRINTF(HWPrefetch, "notifyL1Resp: PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
+    //                     pkt->req->getPC(), pkt->req->getPaddr(), 
+    //                     pkt->req->hasVaddr() ? pkt->req->getVaddr() : 0x0,
+    //                     pkt->getSize(), resp_data);
 }
 
 void
