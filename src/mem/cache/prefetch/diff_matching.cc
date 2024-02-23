@@ -706,7 +706,7 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
             std::memcpy(&new_data, &resp_data, sizeof(int64_t));
 
             // repeation check
-            // if (iddt_ent.getLast() == new_data) continue;
+            if (iddt_ent.getLast() == new_data) continue;
 
             DPRINTF(DMP, "notifyL1Resp: [filter pass] PC %llx, PAddr %llx, VAddr %llx, Size %d, Data %llx\n", 
                                 pkt->req->getPC(), pkt->req->getPaddr(), 
@@ -939,7 +939,11 @@ void
 DiffMatching::callReadytoIssue(const PrefetchInfo& pfi) 
 {
     Addr pc = pfi.getPC();
-    insertIndexQueue(pc, pfi.getcID());
+
+    // mask kernel space
+    if ((pc & 0xffff800000000000) == 0) {
+        insertIndexQueue(pc, pfi.getcID());
+    }
     if (auto_detect && !checkNewIndexEvent.scheduled()) {
         // schedule next index pick
         schedule(checkNewIndexEvent, curTick() + clockPeriod() * detect_period);

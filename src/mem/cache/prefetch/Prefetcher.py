@@ -719,8 +719,8 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     auto_detect = Param.Bool(True, "Start index_pc detecting or not")
     detect_period = Param.Unsigned(1000, "Cycles between index pc choosing")
 
-    iddt_diff_num = Param.Unsigned(8, "Number of difference entries of iddt")
-    tadt_diff_num = Param.Unsigned(5, "Number of difference entries of tadt")
+    iddt_diff_num = Param.Unsigned(12, "Number of difference entries of iddt")
+    tadt_diff_num = Param.Unsigned(10, "Number of difference entries of tadt")
 
     ics_miss_threshold = Param.Unsigned(6, "Number of candidate pc miss threshold")
     ics_candidate_num = Param.Unsigned(3, "Number of candidate target in ics")

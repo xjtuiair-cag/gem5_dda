@@ -313,8 +313,6 @@ def config_cache(options, system):
                 system.l2.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
 
                 system.l2.prefetcher.auto_detect = True
-                system.l2.prefetcher.iddt_diff_num = 12
-                system.l2.prefetcher.tadt_diff_num = 10
 
                 # system.l2.prefetcher.queue_size = 1024*1024*16
                 # system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
