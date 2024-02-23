@@ -600,13 +600,15 @@ DiffMatching::notifyL1Req(const PacketPtr &pkt)
 
     Addr req_addr = pkt->req->getVaddr();
 
+    // avoid overflow when calculating DiffSeq
+    if (req_addr > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) return;
+
     for (auto& tadt_ent: targetAddrDeltaTable) {
 
         Addr target_pc = tadt_ent.getPC();
         
         // tadt_ent validation check
         if (target_pc != pkt->req->getPC() || !tadt_ent.isValid()) continue;
-        assert(req_addr <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
         // range check
         if (!rangeFilter(target_pc, req_addr, 
@@ -662,19 +664,21 @@ DiffMatching::notifyL1Resp(const PacketPtr &pkt)
     const int data_stride = 8;
     const int byte_width = 8;
 
+    if (pkt->getSize() > 8) return; 
+    uint8_t data[8] = {0};
+    pkt->writeData(data); 
+    uint64_t resp_data = 0;
+    for (int i_st = data_stride-1; i_st >= 0; i_st--) {
+        resp_data = resp_data << byte_width;
+        resp_data += static_cast<uint64_t>(data[i_st]);
+    }
+
+    // avoid overflow when calculating DiffSeq
+    if (resp_data > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) return;
+
     // update IDDT
     for (auto& iddt_ent: indexDataDeltaTable) {
         if (iddt_ent.getPC() == pkt->req->getPC() && iddt_ent.isValid()) {
-
-            assert(pkt->getSize() <= 8); 
-            uint8_t data[8] = {0};
-            pkt->writeData(data); 
-            uint64_t resp_data = 0;
-            for (int i_st = data_stride-1; i_st >= 0; i_st--) {
-                resp_data = resp_data << byte_width;
-                resp_data += static_cast<uint64_t>(data[i_st]);
-            }
-            assert(resp_data <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 
             IndexData new_data;
             std::memcpy(&new_data, &resp_data, sizeof(int64_t));
