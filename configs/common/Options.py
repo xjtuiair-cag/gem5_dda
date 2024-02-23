@@ -197,6 +197,9 @@ def addNoISAOptions(parser):
     parser.add_argument("--l1i_assoc", type=int, default=2)
     parser.add_argument("--l2_assoc", type=int, default=8)
     parser.add_argument("--l3_assoc", type=int, default=16)
+    parser.add_argument("--l1i_mshr_num", type=int, default=16)
+    parser.add_argument("--l1d_mshr_num", type=int, default=16)
+    parser.add_argument("--l2_mshr_num", type=int, default=32)
     parser.add_argument("--cacheline_size", type=int, default=64)
 
     parser.add_argument("--l1d_repl_policy",  default="LRURP",

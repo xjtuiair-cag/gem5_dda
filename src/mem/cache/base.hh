@@ -1187,6 +1187,9 @@ class BaseCache : public ClockedObject
         /** Number of replacements of valid blocks. */
         statistics::Scalar replacements;
 
+        /** Number of prefetch blocks filled */
+        statistics::Scalar prefetchFills;
+
         /** Number of data expansions. */
         statistics::Scalar dataExpansions;
 
