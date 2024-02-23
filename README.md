@@ -9,6 +9,7 @@
     + [Linux Kernel with Bootloader](http://dist.gem5.org/dist/v22-0/arm/aarch-system-20220707.tar.bz2)
     + [Linux Disk Images](http://dist.gem5.org/dist/v22-0/arm/disks/ubuntu-18.04-arm64-docker.img.bz2)
 + executable workload, instrumented with gem5ops (eg. spmv_csr.elf)
+    + serial sourcecode in `serial_workload`
 + test scripts (eg. spmv_csr.rcS)
 
 ## Configuration
@@ -56,13 +57,13 @@ scons build/ARM/gem5.opt -j(nproc)
 ```shell
 
 build/ARM/gem5.opt \
-    configs/dmp_pf/fs.py \
+    configs/dmp_pf/fs_L2.py \
     --num-cpus 1 \
     --cpu-clock 2.5GHz \
     --cpu-type O3_ARM_v7a_3 \
-    --caches --l2cache --l3cache \
-    --l1i_size 64kB --l1d_size 32kB --l2_size 256kB \
-    --l1i_assoc 8 --l1d_assoc 8 --l2_assoc 16 --cacheline_size 64 \
+    --caches --l2cache \
+    --l1i_assoc 8 --l1d_assoc 8 --l2_assoc 4 \
+    --l2_mshr_num 32 \
     --l2_repl_policy LRURP \
     --l2-hwp-type DiffMatchingPrefetcher \
     --dmp-init-bench spmv \
@@ -78,7 +79,7 @@ build/ARM/gem5.opt \
 ### Additional Options
 | Name | Description | Example |
 | --- | ------------ | ----- |
-| --dmp-init-bench | benchmark name for PC hint | spmv |
+| --dmp-init-bench | benchmark name for PC hint when auto-detection is disable | spmv |
 | --dmp-notify | access cache level which trigger DMP | l1 |
 | --tlb-size | DTLB size | 65536 |
 | --stride-degree | degree for StridePrefetcher | 4 |
