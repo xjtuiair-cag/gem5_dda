@@ -411,6 +411,26 @@ DiffMatching::findRTE(Addr index_pc, Addr target_pc, ContextID cID)
     return false;
 }
 
+bool
+DiffMatching::checkRedundantRTE(Addr index_pc, Addr target_base_addr, ContextID cID)
+{
+    // check whether current new RTE will be prefetched by other exist RTEs
+    Addr block_addr_mask = ~(Addr(blkSize - 1));
+    for (const auto& rte : relationTable) 
+    {
+        if (!rte.valid) continue;
+
+        if ( rte.index_pc == index_pc && 
+             ((rte.target_base_addr ^ target_base_addr) & block_addr_mask) == 0 &&
+             rte.cID == cID ) {
+            // target_base_addr points to the same cache block
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void
 DiffMatching::insertRT(
     const iddt_ent_t& iddt_ent_match, 
@@ -421,9 +441,7 @@ DiffMatching::insertRT(
     Addr new_target_pc = tadt_ent_match.getPC();
 
     // check if pattern already exist
-    if (findRTE(new_index_pc, new_target_pc, cID)) {
-        return;
-    }
+    if (findRTE(new_index_pc, new_target_pc, cID)) return;
 
     // calculate the target base address
     IndexData data_match = iddt_ent_match.getLast();
@@ -440,6 +458,8 @@ DiffMatching::insertRT(
     
     assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
+
+    if (checkRedundantRTE(new_index_pc, target_base_addr, cID)) return;
 
     /* get indexPC Range type */
     bool new_range_type;
@@ -592,6 +612,8 @@ DiffMatching::rangeFilter(Addr pc_in, Addr addr_in, ContextID cID_in)
 void
 DiffMatching::notifyL1Req(const PacketPtr &pkt) 
 {  
+    // only process with read request
+    if (!pkt->isRead()) return;
 
     // update TADT
     if (!pkt->req->hasPC() || !pkt->req->hasVaddr()) {

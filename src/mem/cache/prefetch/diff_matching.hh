@@ -392,6 +392,8 @@ class DiffMatching : public Stride
 
     bool findRTE(Addr index_pc, Addr target_pc, ContextID cID);
 
+    bool checkRedundantRTE(Addr index_pc, Addr target_base_addr, ContextID cID);
+
     void insertRT(
         const iddt_ent_t& iddt_ent_match, const tadt_ent_t& tadt_ent_match,
         int iddt_match_point, unsigned int shift, ContextID cID
