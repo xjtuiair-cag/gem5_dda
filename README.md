@@ -21,17 +21,17 @@
 
 Mount disk img as loop dev.
 ```shell
-sudo losetup -P /dev/loopX disk_path
-sudo mount /dev/loopXpY disk_mount_point_as_you_like
+# losetup -P /dev/loopX disk_path
+# mount /dev/loopXpY disk_mount_point_as_you_like
 ```
 
 Copy workload into it.
 ```shell
-sudo cp workload disk_mount_point_as_you_like/your_workload_path/
+# cp workload disk_mount_point_as_you_like/your_workload_path/
 ```
 Example:
 ```
-sudo cp spmv_csr.elf as-caida_csr.mtx disk_mount_point_as_you_like/spmv/
+# cp spmv_csr.elf as-caida_csr.mtx disk_mount_point_as_you_like/spmv/
 ```
 
 Configurate rcS with your workload path. Example *spmv_csr.rcS*
@@ -50,13 +50,13 @@ echo "SpMV Done."
 
 + Compile GEM5 with scons:
 ```shell
-scons build/ARM/gem5.opt -j(nproc)
+$ scons build/ARM/gem5.opt -j(nproc)
 ```
 
 + run gem5. Example:
 ```shell
 
-build/ARM/gem5.opt \
+$ build/ARM/gem5.opt \
     configs/dmp_pf/fs_L2.py \
     --num-cpus 1 \
     --cpu-clock 2.5GHz \
