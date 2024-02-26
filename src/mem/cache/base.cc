@@ -504,12 +504,18 @@ BaseCache::recvTimingReq(PacketPtr pkt)
         if (prefetcher && blk && blk->wasPrefetched()) {
             DPRINTF(Cache, "Hit on prefetch for addr %#x (%s)\n",
                     pkt->getAddr(), pkt->isSecure() ? "s" : "ns");
+            prefetcher->prefetchHit(pkt, false);
             blk->clearPrefetched();
         }
 
         handleTimingReqHit(pkt, blk, request_time);
     } else {
+
         handleTimingReqMiss(pkt, blk, forward_time, request_time);
+
+        if (prefetcher) {
+            prefetcher->prefetchHit(pkt, true);
+        }
 
         ppMiss->notify(pkt);
     }
@@ -970,6 +976,13 @@ BaseCache::getNextQueueEntry()
                         "dropped.\n", pf_addr);
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInCache(pkt);
+
+                CacheBlk* try_cache_blk = getCacheBlk(pf_addr, false);
+
+                if (try_cache_blk != nullptr && try_cache_blk->data) {
+                    prefetcher->notifyFill(pkt, try_cache_blk->data);
+                }
+
                 // free the request and packet
                 delete pkt;
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {

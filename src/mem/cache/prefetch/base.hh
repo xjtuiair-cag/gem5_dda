@@ -451,6 +451,8 @@ class Base : public ClockedObject
 
     virtual Tick nextPrefetchReadyTime() const = 0;
 
+    void prefetchHit(PacketPtr pkt, bool miss);
+
     void
     prefetchUnused(Addr pc)
     {
