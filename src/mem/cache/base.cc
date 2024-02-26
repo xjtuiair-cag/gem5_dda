@@ -504,12 +504,19 @@ BaseCache::recvTimingReq(PacketPtr pkt)
         if (prefetcher && blk && blk->wasPrefetched()) {
             DPRINTF(Cache, "Hit on prefetch for addr %#x (%s)\n",
                     pkt->getAddr(), pkt->isSecure() ? "s" : "ns");
+            prefetcher->prefetchHit(pkt, false);
             blk->clearPrefetched();
+            stats.prefetchHits++;
         }
 
         handleTimingReqHit(pkt, blk, request_time);
     } else {
+
         handleTimingReqMiss(pkt, blk, forward_time, request_time);
+
+        if (prefetcher) {
+            prefetcher->prefetchHit(pkt, true);
+        }
 
         ppMiss->notify(pkt);
     }
@@ -2479,6 +2486,8 @@ BaseCache::CacheStats::CacheStats(BaseCache &c)
              "number of replacements"),
     ADD_STAT(prefetchFills, statistics::units::Count::get(),
              "number of prefetch fills"),
+    ADD_STAT(prefetchHits, statistics::units::Count::get(),
+             "number of prefetch hits"),
     ADD_STAT(dataExpansions, statistics::units::Count::get(),
              "number of data expansions"),
     ADD_STAT(dataContractions, statistics::units::Count::get(),

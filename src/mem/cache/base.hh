@@ -1190,6 +1190,9 @@ class BaseCache : public ClockedObject
         /** Number of prefetch blocks filled */
         statistics::Scalar prefetchFills;
 
+        /** Number of prefetch hits */
+        statistics::Scalar prefetchHits;
+
         /** Number of data expansions. */
         statistics::Scalar dataExpansions;
 

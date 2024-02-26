@@ -453,18 +453,9 @@ Base::pageIthBlockAddress(Addr page, uint32_t blockIndex) const
     return page + (blockIndex << lBlkSize);
 }
 
-void
-Base::probeNotify(const PacketPtr &pkt, bool miss)
+void 
+Base::prefetchHit(PacketPtr pkt, bool miss)
 {
-    // Don't notify prefetcher on SWPrefetch, cache maintenance
-    // operations or for writes that we are coaslescing.
-    if (pkt->cmd.isSWPrefetch()) return;
-    if (pkt->req->isCacheMaintenance()) return;
-    if (pkt->isWrite() && cache != nullptr && cache->coalesce()) return;
-    if (!pkt->req->hasPaddr()) {
-        panic("Request must have a physical address");
-    }
-
     if (hasBeenPrefetched(pkt->getAddr(), pkt->isSecure())) {
         usefulPrefetches += 1;
         prefetchStats.pfUseful++;
@@ -476,20 +467,24 @@ Base::probeNotify(const PacketPtr &pkt, bool miss)
                 break;
             }
         }
-        // if (pkt->req->hasPC()) {
-        //     Addr req_pc = pkt->req->getPC();
-        //     for (int i = 0; i < stats_pc_list.size(); i++) {
-        //         if (req_pc == stats_pc_list[i]) {
-        //             prefetchStats.pfUsefulPerPfPC[i]++;
-        //             break;
-        //         }
-        //     }
-        // }
 
         if (miss)
             // This case happens when a demand hits on a prefetched line
             // that's not in the requested coherency state.
             prefetchStats.pfUsefulButMiss++;
+    }
+}
+
+void
+Base::probeNotify(const PacketPtr &pkt, bool miss)
+{
+    // Don't notify prefetcher on SWPrefetch, cache maintenance
+    // operations or for writes that we are coaslescing.
+    if (pkt->cmd.isSWPrefetch()) return;
+    if (pkt->req->isCacheMaintenance()) return;
+    if (pkt->isWrite() && cache != nullptr && cache->coalesce()) return;
+    if (!pkt->req->hasPaddr()) {
+        panic("Request must have a physical address");
     }
 
     if (!observeAccess(pkt, miss)) {

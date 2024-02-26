@@ -460,6 +460,8 @@ class Base : public ClockedObject
     
     virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr) {};
 
+    void prefetchHit(PacketPtr pkt, bool miss);
+
     void
     prefetchUnused(Addr pc)
     {
