@@ -227,8 +227,11 @@ def config_cache(options, system):
 
                 # system.l2.prefetcher.queue_size = 1024*1024*16
                 # system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024
-                system.l2.prefetcher.queue_size = 64
-                system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 64
+
+                system.cpu[i].dcache.prefetcher.auto_detect = False
+
+                system.cpu[i].dcache.prefetcher.queue_size = 64
+                system.cpu[i].dcache.prefetcher.max_prefetch_requests_with_pending_translation = 64
 
                 if options.dmp_init_bench:
                     system.cpu[i].dcache.prefetcher.index_pc_init = \
