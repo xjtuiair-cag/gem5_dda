@@ -213,6 +213,9 @@ def config_cache(options, system):
 
             system.cpu[i].dcache.stats_pc_list = monitor_pc_list
 
+            system.cpu[i].dcache.tags = FALRU()
+            system.cpu[i].dcache.tags.min_tracked_cache_size = '16KiB'
+
             if options.l1d_hwp_type == "StridePrefetcher":
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
 
@@ -223,6 +226,7 @@ def config_cache(options, system):
 
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
                 system.cpu[i].dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+                system.cpu[i].dcache.prefetcher.range_ahead_dist = getattr(options, "dmp_range_ahead_dist", 0)
                 system.cpu[i].dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
 
                 # system.l2.prefetcher.queue_size = 1024*1024*16
