@@ -458,7 +458,7 @@ class Base : public ClockedObject
 
     virtual Tick nextPrefetchReadyTime() const = 0;
     
-    virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr) {};
+    virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) {}
 
     void prefetchHit(PacketPtr pkt, bool miss);
 

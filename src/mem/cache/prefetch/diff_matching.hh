@@ -449,7 +449,7 @@ class DiffMatching : public Stride
     void insertIndirectPrefetch(Addr pf_addr, Addr target_pc, 
                                 ContextID cID, int32_t priority);
 
-    void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr) override;
+    void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) override;
 
     void addPfHelper(Stride* s);
 
