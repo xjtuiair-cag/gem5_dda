@@ -491,13 +491,13 @@ DiffMatching::insertRT(
 
     /* get priority */
     int32_t priority = 0;
-    if (new_range_type) {
-        priority = cur_range_priority;
-        cur_range_priority -= range_group_size;
-    } else {
-        priority = getPriority(new_index_pc, cID) + 1;
-        assert(priority % range_group_size > 0);
-    }
+    // if (new_range_type) {
+    //     priority = cur_range_priority;
+    //     cur_range_priority -= range_group_size;
+    // } else {
+    //     priority = getPriority(new_index_pc, cID) + 1;
+    //     assert(priority % range_group_size > 0);
+    // }
 
     DPRINTF(DMP, "Insert RelationTable: "
         "indexPC %llx targetPC %llx target_addr %llx shift %d cID %d rangeType %d priority %d\n",
@@ -990,21 +990,46 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 
             if (range_type) {
 
-                int i;
-
                 if (pkt->req->getPC() == 0x400ca0) {
-                    i = range_ahead_dist;
-                } else {
-                    i = 28;
+                    insertIndirectPrefetch(
+                        pkt->req->getVaddr() + range_ahead_dist, 
+                        pkt->req->getPC(), 
+                        0, 1
+                    );
+
+                    // first level
+                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                    if (try_cache_blk != nullptr && try_cache_blk->data ) {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data, true);
+                    }
+
+                } else if (pkt->req->getPC() == 0x400c70) {
+                    insertIndirectPrefetch(
+                        pkt->req->getVaddr() + 2 * range_ahead_dist, 
+                        pkt->req->getPC(), 
+                        0, 1
+                    );
+
+                    // first level
+                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr() + range_ahead_dist, pkt->isSecure());
+                    if (try_cache_blk != nullptr && try_cache_blk->data ) {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr() + range_ahead_dist, try_cache_blk->data, true);
+                    }
+
+                    // second level
+                    CacheBlk* try_cache_blk_2 = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                    if (try_cache_blk_2 != nullptr && try_cache_blk_2->data ) {
+                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk_2->data, true);
+                    }
                 }
                 // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
-                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
-                    if (try_cache_blk != nullptr && try_cache_blk->data ) {
-                        // notifyFill(pkt, try_cache_blk->data);
+                    // CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
+                    // if (try_cache_blk != nullptr && try_cache_blk->data ) {
+                    //     // notifyFill(pkt, try_cache_blk->data);
 
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data, true);
+                    //     hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data, true);
 
-                    }
+                    // }
                 // }
 
                 // assert(try_cache_blk && try_cache_blk->data);
@@ -1044,7 +1069,7 @@ DiffMatching::addPfHelper(Stride* s)
 void
 DiffMatching::calculatePrefetch(const PrefetchInfo &pfi, std::vector<AddrPriority> &addresses) 
 {
-    if (pf_helper) {
+    if (true || pf_helper) {
         // use fake_addresses to drop Stride Prefetch while keep updating pcTables
         std::vector<AddrPriority> fake_addresses;
 

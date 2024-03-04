@@ -945,9 +945,9 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
 
     }
 
-    if (fill_prefetch) {
-        ppFill->notify(pkt);
-    }
+    // if (fill_prefetch) {
+    //     ppFill->notify(pkt);
+    // }
     // if (from_pref) {
     //     ppFill->notify(pkt);
     // }

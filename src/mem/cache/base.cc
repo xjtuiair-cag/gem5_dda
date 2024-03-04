@@ -983,7 +983,8 @@ BaseCache::getNextQueueEntry()
                     prefetcher->hitTrigger(
                         pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr,
                         pkt->req->getPaddr(), try_cache_blk->data,
-                        false
+                        // false
+                        true
                     );
                 }
                 // free the request and packet
