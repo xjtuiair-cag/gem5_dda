@@ -372,7 +372,14 @@ def addCommonOptions(parser):
         help="Byte-distance prefetch ahead which triggered by stream refill",
     )
     parser.add_argument(
-        "--dmp-range-ahead-dist",
+        "--dmp-range-ahead-dist-level-1",
+        default=0,
+        action="store",
+        type=int,
+        help="Number of prefetchs ahead when a range target being identified",
+    )
+    parser.add_argument(
+        "--dmp-range-ahead-dist-level-2",
         default=0,
         action="store",
         type=int,

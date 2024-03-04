@@ -21,7 +21,8 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rg_ent_num(p.rg_ent_num),
     ics_ent_num(p.ics_ent_num),
     rt_ent_num(p.rt_ent_num),
-    range_ahead_dist(p.range_ahead_dist),
+    range_ahead_dist_level_1(p.range_ahead_dist_level_1),
+    range_ahead_dist_level_2(p.range_ahead_dist_level_2),
     indir_range(p.indir_range),
     notify_latency(p.notify_latency),
     cur_range_priority(0),
@@ -494,6 +495,12 @@ DiffMatching::insertRT(
     if (new_range_type) {
         priority = cur_range_priority;
         cur_range_priority -= range_group_size;
+
+        for (auto& rt_ent : relationTable) {
+            if (rt_ent.valid && rt_ent.index_pc == new_target_pc) {
+                rt_ent.priority = priority + 1;
+            }
+        }
     } else {
         priority = getPriority(new_index_pc, cID) + 1;
         assert(priority % range_group_size > 0);
@@ -795,11 +802,11 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
         /* set range_end, only process one data if not range type */
         unsigned range_end;
         if (rt_ent.range) {
-            // range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
-            continue;
+            range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
         } else {
             range_end = data_offset + data_stride;
         }
+        // range_end = data_offset + data_stride;
 
         /* loop for range prefetch */
         for (unsigned i_of = data_offset; i_of < range_end; i_of += data_stride)
@@ -993,9 +1000,9 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                 int i;
 
                 if (pkt->req->getPC() == 0x400ca0) {
-                    i = range_ahead_dist;
+                    i = range_ahead_dist_level_2;
                 } else {
-                    i = 28;
+                    i = range_ahead_dist_level_1;
                 }
                 // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
                     CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());

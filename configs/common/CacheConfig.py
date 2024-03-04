@@ -226,7 +226,8 @@ def config_cache(options, system):
 
                 system.cpu[i].dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
                 system.cpu[i].dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
-                system.cpu[i].dcache.prefetcher.range_ahead_dist = getattr(options, "dmp_range_ahead_dist", 0)
+                system.cpu[i].dcache.prefetcher.range_ahead_dist_level_1 = getattr(options, "dmp_range_ahead_dist_level_1", 0)
+                system.cpu[i].dcache.prefetcher.range_ahead_dist_level_2 = getattr(options, "dmp_range_ahead_dist_level_2", 0)
                 system.cpu[i].dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
 
                 # system.l2.prefetcher.queue_size = 1024*1024*16

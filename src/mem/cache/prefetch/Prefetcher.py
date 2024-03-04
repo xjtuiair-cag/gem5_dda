@@ -729,7 +729,10 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     stream_ahead_dist = Param.Unsigned(
         64, "Byte-distance prefetch ahead which triggered by stream refill"
     )
-    range_ahead_dist = Param.Unsigned(
+    range_ahead_dist_level_1 = Param.Unsigned(
+        0, "Number of prefetchs ahead when a range target being identified"
+    )
+    range_ahead_dist_level_2 = Param.Unsigned(
         0, "Number of prefetchs ahead when a range target being identified"
     )
     indir_range = Param.Unsigned(

@@ -37,7 +37,8 @@ class DiffMatching : public Stride
     const int rt_ent_num;
 
     // indirect range prefetch length
-    int range_ahead_dist;
+    int range_ahead_dist_level_1;
+    int range_ahead_dist_level_2;
     int indir_range;
 
     int notify_latency;
