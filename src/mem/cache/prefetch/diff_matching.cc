@@ -990,8 +990,14 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 
             if (range_type) {
 
-                // int i = 8;
-                for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
+                int i;
+
+                if (pkt->req->getPC() == 0x400ca0) {
+                    i = range_ahead_dist;
+                } else {
+                    i = 28;
+                }
+                // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
                     CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {
                         // notifyFill(pkt, try_cache_blk->data);
@@ -999,7 +1005,7 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                         hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data, true);
 
                     }
-                }
+                // }
 
                 // assert(try_cache_blk && try_cache_blk->data);
 
