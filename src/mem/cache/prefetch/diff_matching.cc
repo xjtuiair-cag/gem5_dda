@@ -886,9 +886,12 @@ DiffMatching::insertIndirectPrefetch(Addr pf_addr, Addr target_pc, ContextID cID
     addToQueue(pfqMissingTranslation, dpp);
 }
 
-void
-DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access)
+std::vector<Addr>
+DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, 
+                          bool from_access, bool do_prefetch)
 {
+    std::vector<Addr> ret_addr;
+
     /* get response data */
     uint8_t fill_data[blkSize];
     std::memcpy(fill_data, data_ptr, blkSize);
@@ -925,12 +928,15 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_
 
             /* calculate target prefetch address */
             Addr pf_addr = (resp_data << rt_ent.shift) + rt_ent.target_base_addr;
+            ret_addr.push_back(pf_addr);
             DPRINTF(HWPrefetch, 
                     "hitTrigger: PC %llx, Addr %llx, data_offset %d, data %d, pf_addr %llx\n", 
                     pc, addr, data_offset, resp_data, pf_addr);
 
             // insert to missing translation queue
-            insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+            if (do_prefetch) {
+                insertIndirectPrefetch(pf_addr, rt_ent.target_pc, rt_ent.cID, rt_ent.priority);
+            }
             
             // if (rt_ent.target_pc == 0x400ca0) {
             //     for (int i = 1; i <= range_ahead_dist; i++) {
@@ -939,9 +945,11 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_
             // }
         // }
 
-        // try to do translation immediately
-        processMissingTranslations(queueSize - pfq.size());
     }
+    // try to do translation immediately
+    processMissingTranslations(queueSize - pfq.size());
+
+    return ret_addr;
 }
 
 void
@@ -990,55 +998,78 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 
             if (range_type) {
 
+                // Mannual Setting for BFS
+
+                // Break layer by range type 
                 if (pkt->req->getPC() == 0x400ca0) {
                     insertIndirectPrefetch(
-                        pkt->req->getVaddr() + range_ahead_dist, 
+                        pkt->req->getVaddr() + 2 * range_ahead_dist, 
                         pkt->req->getPC(), 
-                        0, 1
+                        0, 0
                     );
 
+                    CacheBlk* try_cache_blk;
+
                     // first level
-                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                    try_cache_blk = cache->getCacheBlk(pkt->getAddr() + range_ahead_dist, pkt->isSecure());
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk->data, true);
+                        hitTrigger(
+                            pkt->req->getPC(),
+                            pkt->req->getPaddr() + range_ahead_dist, 
+                            try_cache_blk->data, 
+                            true, true
+                        );
                     }
 
                 } else if (pkt->req->getPC() == 0x400c70) {
                     insertIndirectPrefetch(
-                        pkt->req->getVaddr() + 2 * range_ahead_dist, 
+                        pkt->req->getVaddr() + 3 * range_ahead_dist, 
                         pkt->req->getPC(), 
-                        0, 1
+                        0, 0
                     );
 
+                    CacheBlk* try_cache_blk;
+
                     // first level
-                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr() + range_ahead_dist, pkt->isSecure());
+                    try_cache_blk = cache->getCacheBlk(pkt->getAddr() + 2 * range_ahead_dist, pkt->isSecure());
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr() + range_ahead_dist, try_cache_blk->data, true);
+                        hitTrigger(
+                            pkt->req->getPC(),
+                            pkt->req->getPaddr() + 2 * range_ahead_dist, 
+                            try_cache_blk->data, 
+                            true, true
+                        );
                     }
 
                     // second level
-                    CacheBlk* try_cache_blk_2 = cache->getCacheBlk(pkt->getAddr(), pkt->isSecure());
-                    if (try_cache_blk_2 != nullptr && try_cache_blk_2->data ) {
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr(), try_cache_blk_2->data, true);
+                    std::vector<Addr> pf_addr;
+                    try_cache_blk = cache->getCacheBlk(pkt->getAddr() + 1 * range_ahead_dist, pkt->isSecure());
+                    if (try_cache_blk != nullptr && try_cache_blk->data ) {
+                        pf_addr = hitTrigger(
+                            pkt->req->getPC(),
+                            pkt->req->getPaddr() + 1 * range_ahead_dist, 
+                            try_cache_blk->data, 
+                            true, false
+                        );
+                        assert(pf_addr.size() == 1);
                     }
+
+                    if (pf_addr.size() > 0){
+                        try_cache_blk = cache->getCacheBlk(pf_addr[0], pkt->isSecure());
+                        if (try_cache_blk != nullptr && try_cache_blk->data ) {
+                            hitTrigger(
+                                pkt->req->getPC(),
+                                pf_addr[0],
+                                try_cache_blk->data, 
+                                true, true
+                            );
+                        }
+                    }
+
                 }
-                // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
-                    // CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
-                    // if (try_cache_blk != nullptr && try_cache_blk->data ) {
-                    //     // notifyFill(pkt, try_cache_blk->data);
-
-                    //     hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data, true);
-
-                    // }
-                // }
-
-                // assert(try_cache_blk && try_cache_blk->data);
-
             }
         }
-    // }
 
-    //}
     // if (pfi.isCacheMiss() && !(cache->inMissQueue(pkt->getAddr(), pkt->isSecure()))) {
         Queued::notify(pkt, pfi);
     // }

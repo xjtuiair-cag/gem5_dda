@@ -47,6 +47,7 @@
 #define __MEM_CACHE_PREFETCH_BASE_HH__
 
 #include <cstdint>
+#include <vector>
 
 #include "arch/generic/tlb.hh"
 #include "base/compiler.hh"
@@ -458,7 +459,10 @@ class Base : public ClockedObject
 
     virtual Tick nextPrefetchReadyTime() const = 0;
     
-    virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) {}
+    virtual std::vector<Addr> hitTrigger(Addr pc, Addr addr, 
+                                         const uint8_t* data_ptr, 
+                                         bool from_access, bool do_prefetch)
+                                        { return std::vector<Addr>(); }
 
     void prefetchHit(PacketPtr pkt, bool miss);
 
