@@ -990,35 +990,35 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         // Test again in Cache which prefetch send to, in case ppMiss->notify() from other position.
         // When this called by ppHit->notify(), we use cache blk data to prefetch.
 
-        if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-            Addr pc = pkt->req->getPC();
-            ContextID cid = pkt->req->contextId();
-            bool range_type = getRangeType(pc, cid);
+        // if (pkt->req->hasPC() && pkt->req->hasContextId()) {
+        //     Addr pc = pkt->req->getPC();
+        //     ContextID cid = pkt->req->contextId();
+        //     bool range_type = getRangeType(pc, cid);
 
-            if (range_type) {
+        //     if (range_type) {
 
-                int i;
+        //         int i;
 
-                if (pc == 0x400ca0) {
-                    i = range_ahead_dist_level_2;
-                } else {
-                    i = range_ahead_dist_level_1;
-                }
-                // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
-                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
-                    if (try_cache_blk != nullptr && try_cache_blk->data ) {
-                        // notifyFill(pkt, try_cache_blk->data);
+        //         if (pc == 0x400ca0) {
+        //             i = range_ahead_dist_level_2;
+        //         } else {
+        //             i = range_ahead_dist_level_1;
+        //         }
+        //         // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
+        //             CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
+        //             if (try_cache_blk != nullptr && try_cache_blk->data ) {
+        //                 // notifyFill(pkt, try_cache_blk->data);
 
-                        hitTrigger(pc, pkt->req->getPaddr()+i, try_cache_blk->data, true);
+        //                 hitTrigger(pc, pkt->req->getPaddr()+i, try_cache_blk->data, true);
 
-                    } else {
-                        insertIndirectPrefetch(
-                            pkt->getAddr()+i, 
-                            pc, cid,
-                            getPriority(pc, cid)
-                        );
-                        processMissingTranslations(queueSize - pfq.size());
-                    }
+        //             } else {
+        //                 insertIndirectPrefetch(
+        //                     pkt->getAddr()+i, 
+        //                     pc, cid,
+        //                     getPriority(pc, cid)
+        //                 );
+        //                 processMissingTranslations(queueSize - pfq.size());
+        //             }
                 // }
 
                 // assert(try_cache_blk && try_cache_blk->data);
