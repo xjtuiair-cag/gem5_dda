@@ -978,7 +978,9 @@ BaseCache::getNextQueueEntry()
                 DPRINTF(RequestSlot, "[Failed] Prefetch droped\n");
                 prefetcher->pfHitInCache(pkt);
                 
-                CacheBlk* try_cache_blk = getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                // CacheBlk* try_cache_blk = getCacheBlk(pkt->getAddr(), pkt->isSecure());
+                Cycles abandoned_lat;
+                CacheBlk* try_cache_blk = tags->accessBlock(pkt, abandoned_lat);
                 if (try_cache_blk && try_cache_blk->data) {
                     prefetcher->hitTrigger(
                         pkt->req->hasPC() ? pkt->req->getPC() : MaxAddr,
