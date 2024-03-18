@@ -991,15 +991,15 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         // When this called by ppHit->notify(), we use cache blk data to prefetch.
 
         if (pkt->req->hasPC() && pkt->req->hasContextId()) {
-            bool range_type = getRangeType(
-                pkt->req->getPC(), pkt->req->contextId()
-            );
+            Addr pc = pkt->req->getPC();
+            ContextID cid = pkt->req->contextId();
+            bool range_type = getRangeType(pc, cid);
 
             if (range_type) {
 
                 int i;
 
-                if (pkt->req->getPC() == 0x400ca0) {
+                if (pc == 0x400ca0) {
                     i = range_ahead_dist_level_2;
                 } else {
                     i = range_ahead_dist_level_1;
@@ -1009,8 +1009,15 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {
                         // notifyFill(pkt, try_cache_blk->data);
 
-                        hitTrigger(pkt->req->getPC(), pkt->req->getPaddr()+i, try_cache_blk->data, true);
+                        hitTrigger(pc, pkt->req->getPaddr()+i, try_cache_blk->data, true);
 
+                    } else {
+                        insertIndirectPrefetch(
+                            pkt->getAddr()+i, 
+                            pc, cid,
+                            getPriority(pc, cid)
+                        );
+                        processMissingTranslations(queueSize - pfq.size());
                     }
                 // }
 
