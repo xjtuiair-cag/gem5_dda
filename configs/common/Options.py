@@ -393,6 +393,13 @@ def addCommonOptions(parser):
         help="Size of indirect prefetch range, limited by Cache blkSize",
     )
     parser.add_argument(
+        "--dmp-replace-th-level-2",
+        default=256,
+        action="store",
+        type=int,
+        help="Level 2 range ahead dist reset threshold",
+    )
+    parser.add_argument(
         "--dmp-init-bench",
         default=None,
         choices=ObjectList.dmp_bench_list.keys(),

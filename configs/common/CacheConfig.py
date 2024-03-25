@@ -49,8 +49,11 @@ from common.Caches import *
 from common import ObjectList
 
 monitor_pc_list = [
-    0x400c70, 0x400c7c, 0x400c80, 0x400ca0, 0x400ca4, 0x400cc0, 0x400ccc, 0x400cdc
+   0x400c70, 0x400c7c, 0x400c80, 0x400ca0, 0x400ca4, 0x400cc0, 0x400ccc, 0x400cdc
 ]
+# monitor_pc_list = [
+#     0x400598, 0x4005b0, 0x4005bc
+# ]
 
 def _get_hwp(hwp_option):
     if hwp_option == None:
@@ -229,6 +232,7 @@ def config_cache(options, system):
                 system.cpu[i].dcache.prefetcher.range_ahead_dist_level_1 = getattr(options, "dmp_range_ahead_dist_level_1", 0)
                 system.cpu[i].dcache.prefetcher.range_ahead_dist_level_2 = getattr(options, "dmp_range_ahead_dist_level_2", 0)
                 system.cpu[i].dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+                system.cpu[i].dcache.prefetcher.replace_threshold_level_2 = getattr(options, "dmp_replace_th_level_2", 256)
 
                 # system.l2.prefetcher.queue_size = 1024*1024*16
                 # system.l2.prefetcher.max_prefetch_requests_with_pending_translation = 1024

@@ -23,7 +23,13 @@ DiffMatching::DiffMatching(const DiffMatchingPrefetcherParams &p)
     rt_ent_num(p.rt_ent_num),
     range_ahead_dist_level_1(p.range_ahead_dist_level_1),
     range_ahead_dist_level_2(p.range_ahead_dist_level_2),
+    range_ahead_init_level_1(p.range_ahead_dist_level_1),
+    range_ahead_init_level_2(p.range_ahead_dist_level_2),
+    range_ahead_buffer_level_1(0),
+    range_ahead_buffer_level_2(0),
     indir_range(p.indir_range),
+    replace_count_level_2(0),
+    replace_threshold_level_2(p.replace_threshold_level_2),
     notify_latency(p.notify_latency),
     cur_range_priority(0),
     range_group_size(p.range_group_size),
@@ -802,6 +808,7 @@ DiffMatching::notifyFill(const PacketPtr &pkt, const uint8_t* data_ptr)
         /* set range_end, only process one data if not range type */
         unsigned range_end;
         if (rt_ent.range) {
+            // continue;
             range_end = std::min(data_offset + data_stride * rt_ent.range_degree, blkSize);
         } else {
             range_end = data_offset + data_stride;
@@ -952,6 +959,42 @@ DiffMatching::hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_
 }
 
 void
+DiffMatching::dmdCatchPfHook(Addr pc)
+{
+    Addr mshr_pf_prio = getPriority(pc, -1);
+
+    if (mshr_pf_prio == 0) return;
+
+    int range_level = 
+        (std::numeric_limits<int32_t>::max() - mshr_pf_prio) / range_group_size;
+
+    if (range_level == 0) {
+        range_ahead_buffer_level_1 += 1;
+    } else {
+        range_ahead_buffer_level_2 += 1;
+    }
+}
+
+void
+DiffMatching::pfReplaceHook(Addr pc)
+{
+    Addr mshr_pf_prio = getPriority(pc, -1);
+
+    if (mshr_pf_prio == 0) return;
+
+    int range_level = 
+        (std::numeric_limits<int32_t>::max() - mshr_pf_prio) / range_group_size;
+    
+    if (range_level > 0) {
+        replace_count_level_2++;
+
+        if (replace_count_level_2 > replace_threshold_level_2) {
+            range_ahead_dist_level_2 = range_ahead_init_level_2;
+        }
+    }
+}
+
+void
 DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 {
     if (pfi.isCacheMiss()) {
@@ -1002,29 +1045,41 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
 
                 DPRINTF(HWPrefetch, "pc %llx access_prio %d range_level : %d\n", pc, access_prio, range_level); 
 
-                int i;
+                int i,d;
                 if (range_level == 0) {
                     i = range_ahead_dist_level_1;
+                    d = (range_ahead_buffer_level_1 > 0) ? 4 : 0;
+                    range_ahead_buffer_level_1 = 0;
+                    range_ahead_dist_level_1 += d;
+
+                    // reset upper level
+                    replace_count_level_2 = 0;
                 } else {
                     i = range_ahead_dist_level_2;
+                    d = (range_ahead_buffer_level_2 > 0) ? 4 : 0;
+                    range_ahead_buffer_level_2 = 0;
+                    range_ahead_dist_level_2 += d;
+
+                    // reset zero level
+                    range_ahead_dist_level_1 = range_ahead_init_level_1;
                 }
 
-                // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
-                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
+                for (int ahead = i; ahead <= i+d; ahead += 4) {
+                    CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+ahead, pkt->isSecure());
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {
                         // notifyFill(pkt, try_cache_blk->data);
 
-                        hitTrigger(pc, pkt->req->getPaddr()+i, try_cache_blk->data, true);
+                        hitTrigger(pc, pkt->req->getPaddr()+ahead, try_cache_blk->data, true);
 
                     } else {
                         insertIndirectPrefetch(
-                            pkt->getAddr()+i, 
+                            pkt->getAddr()+ahead, 
                             pc, cid,
                             getPriority(pc, cid)
                         );
                         processMissingTranslations(queueSize - pfq.size());
                     }
-                // }
+                }
 
                 // assert(try_cache_blk && try_cache_blk->data);
 

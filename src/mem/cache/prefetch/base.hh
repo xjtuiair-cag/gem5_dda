@@ -458,13 +458,19 @@ class Base : public ClockedObject
 
     virtual Tick nextPrefetchReadyTime() const = 0;
     
-    virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) {}
+    virtual void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) {};
+
+    virtual void dmdCatchPfHook(Addr pc) {};
+
+    virtual void pfReplaceHook(Addr pc) {};
 
     void prefetchHit(PacketPtr pkt, bool miss);
 
     void
     prefetchUnused(Addr pc)
     {
+        pfReplaceHook(pc);
+
         prefetchStats.pfUnused++;
 
         if (pc != MaxAddr) {
@@ -479,6 +485,8 @@ class Base : public ClockedObject
 
     void incrDemandMshrHitsAtPf(Addr pc)
     {
+        dmdCatchPfHook(pc);
+
         prefetchStats.demandMshrHitsAtPf++;
 
         if (pc != MaxAddr) {

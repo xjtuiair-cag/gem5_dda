@@ -39,7 +39,14 @@ class DiffMatching : public Stride
     // indirect range prefetch length
     int range_ahead_dist_level_1;
     int range_ahead_dist_level_2;
+    int range_ahead_init_level_1;
+    int range_ahead_init_level_2;
+    int range_ahead_buffer_level_1;
+    int range_ahead_buffer_level_2;
     int indir_range;
+
+    int replace_count_level_2;
+    int replace_threshold_level_2;
 
     int notify_latency;
 
@@ -453,6 +460,10 @@ class DiffMatching : public Stride
                                 ContextID cID, int32_t priority);
 
     void hitTrigger(Addr pc, Addr addr, const uint8_t* data_ptr, bool from_access) override;
+
+    void dmdCatchPfHook(Addr pc) override;
+
+    void pfReplaceHook(Addr pc) override;
 
     void addPfHelper(Stride* s);
 

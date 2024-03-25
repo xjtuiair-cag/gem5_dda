@@ -738,6 +738,9 @@ class DiffMatchingPrefetcher(StridePrefetcher):
     indir_range = Param.Unsigned(
         16, "Size of indirect prefetch range, limited by Cache blkSize" 
     )
+    replace_threshold_level_2 = Param.Unsigned(
+        256, "Level 2 range ahead dist reset threshold"
+    )
 
     notify_latency = Param.Unsigned(0, "Notify triggered prefetch latency")
 
