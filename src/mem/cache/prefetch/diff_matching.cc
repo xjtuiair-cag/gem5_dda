@@ -526,13 +526,13 @@ DiffMatching::insertRT(
 }
 
 int32_t
-DiffMatching::getPriority(Addr pc_in, ContextID cID_in)
+DiffMatching::getPriority(Addr target_pc_in, ContextID cID_in)
 {
     int32_t priority = 0;
     for (auto& rt_ent : relationTable) {
         // if (!rt_ent.valid()) continue;
 
-        if (rt_ent.target_pc != pc_in) continue;
+        if (rt_ent.target_pc != target_pc_in) continue;
 
         if (cID_in != -1 && rt_ent.cID != cID_in) continue;
 
@@ -543,7 +543,7 @@ DiffMatching::getPriority(Addr pc_in, ContextID cID_in)
     return priority;
 }
 
-bool
+int32_t
 DiffMatching::getRangeType(Addr index_pc_in, ContextID cID_in)
 {
     for (auto& rt_ent : relationTable) {
@@ -551,10 +551,10 @@ DiffMatching::getRangeType(Addr index_pc_in, ContextID cID_in)
         // if (!rt_ent.valid()) continue;
 
         if (rt_ent.index_pc == index_pc_in && rt_ent.cID == cID_in) {
-            return rt_ent.range;
+            return rt_ent.priority;
         }
     }
-    return false;
+    return -1;
 }
 
 bool
@@ -993,17 +993,22 @@ DiffMatching::notify (const PacketPtr &pkt, const PrefetchInfo &pfi)
         if (pkt->req->hasPC() && pkt->req->hasContextId()) {
             Addr pc = pkt->req->getPC();
             ContextID cid = pkt->req->contextId();
-            bool range_type = getRangeType(pc, cid);
+            int32_t access_prio = getRangeType(pc, cid);
 
-            if (range_type) {
+            if (access_prio > 0) {
+
+                int range_level = 
+                    (std::numeric_limits<int32_t>::max() - access_prio) / range_group_size;
+
+                DPRINTF(HWPrefetch, "pc %llx access_prio %d range_level : %d\n", pc, access_prio, range_level); 
 
                 int i;
-
-                if (pc == 0x400ca0) {
-                    i = range_ahead_dist_level_2;
-                } else {
+                if (range_level == 0) {
                     i = range_ahead_dist_level_1;
+                } else {
+                    i = range_ahead_dist_level_2;
                 }
+
                 // for (int i = range_ahead_dist; i <= range_ahead_dist; i+=4) {
                     CacheBlk* try_cache_blk = cache->getCacheBlk(pkt->getAddr()+i, pkt->isSecure());
                     if (try_cache_blk != nullptr && try_cache_blk->data ) {

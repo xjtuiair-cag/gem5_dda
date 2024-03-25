@@ -400,9 +400,11 @@ class DiffMatching : public Stride
         int iddt_match_point, unsigned int shift, ContextID cID
     );
 
-    int32_t getPriority(Addr pc_in, ContextID cID_in);
+    // return priority if target pc matched 
+    int32_t getPriority(Addr target_pc_in, ContextID cID_in);
 
-    bool getRangeType(Addr index_pc_in, ContextID cID_in);
+    // return priority if range index pc matched, -1 for single pattern
+    int32_t getRangeType(Addr index_pc_in, ContextID cID_in);
 
 
     /** DMP specific stats */
