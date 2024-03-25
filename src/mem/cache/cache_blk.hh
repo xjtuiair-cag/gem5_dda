@@ -267,7 +267,7 @@ class CacheBlk : public TaggedEntry
 
     void setPrefetchedAllocate() { _prefetched_allocate = true; };
 
-    Addr getPC() { return _src_pc; };
+    Addr getPC() const { return _src_pc; };
 
     void setPC(Addr pc) { _src_pc = pc; };
 
@@ -415,9 +415,9 @@ class CacheBlk : public TaggedEntry
           default:    s = 'T'; break; // @TODO add other types
         }
         return csprintf("state: %x (%c) writable: %d readable: %d "
-            "dirty: %d prefetched: %d | %s", coherence, s,
+            "dirty: %d prefetched: %d from_pf: %d | pc %llx |%s", coherence, s,
             isSet(WritableBit), isSet(ReadableBit), isSet(DirtyBit),
-            wasPrefetched(), TaggedEntry::print());
+            wasPrefetched(), fromPrefetched(), getPC(), TaggedEntry::print());
     }
 
     /**
